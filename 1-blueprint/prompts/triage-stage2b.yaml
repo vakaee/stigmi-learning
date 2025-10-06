@@ -1,0 +1,34 @@
+_type: prompt
+name: Stage 2b Triage - Non-Answer Intent
+description: Classify non-answer inputs (conceptual question, stuck, or off-topic)
+model: gpt-4o-mini
+temperature: 0.1
+max_tokens: 100
+
+input_variables:
+  - problem
+  - student_input
+  - chat_history
+
+template: |
+  The student is NOT giving an answer. What are they doing?
+
+  Problem: {problem}
+  Student input: "{student_input}"
+
+  {% if chat_history %}
+  Previous conversation:
+  {chat_history}
+  {% endif %}
+
+  Classify as ONE:
+  - conceptual_question: Asking what a concept means ("What's a negative number?")
+  - stuck: Asking for help or saying they don't know ("I'm stuck", "help", "I don't know")
+  - off_topic: Unrelated to the problem ("What's for lunch?", random chat)
+
+  Respond with JSON only:
+  {{
+    "category": "one of above",
+    "confidence": 0.0-1.0,
+    "reasoning": "brief explanation"
+  }}

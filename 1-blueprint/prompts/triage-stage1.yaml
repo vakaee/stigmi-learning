@@ -1,0 +1,29 @@
+_type: prompt
+name: Stage 1 Triage - Intent Detection
+description: Determine if student input is an answer attempt or something else
+model: gpt-4o-mini
+temperature: 0.1
+max_tokens: 50
+
+input_variables:
+  - problem
+  - student_input
+
+template: |
+  Is this student input an answer attempt to the problem, or something else?
+
+  Problem: {problem}
+  Student input: "{student_input}"
+
+  Respond with JSON only:
+  {{
+    "is_answer": true/false,
+    "confidence": 0.0-1.0
+  }}
+
+  Examples:
+  "2" → {{"is_answer": true, "confidence": 0.99}}
+  "I don't know" → {{"is_answer": false, "confidence": 0.95}}
+  "What is a negative number?" → {{"is_answer": false, "confidence": 0.98}}
+  "-8" → {{"is_answer": true, "confidence": 0.99}}
+  "I think it's around two" → {{"is_answer": true, "confidence": 0.85}}

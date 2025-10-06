@@ -1,0 +1,454 @@
+{
+  "version": "1.0",
+  "description": "Fully specified exemplar questions for AI tutor testing",
+  "categories_coverage": {
+    "correct": ["q1", "q2", "q3", "q4", "q5"],
+    "close": ["q1", "q4"],
+    "wrong_operation": ["q1", "q2", "q5", "q7"],
+    "conceptual_question": ["q3", "q8"],
+    "stuck": ["q3"],
+    "off_topic": ["q6"]
+  },
+
+  "questions": [
+    {
+      "id": "neg_add_1",
+      "priority": "must_test",
+      "problem": "What is -3 + 5?",
+      "correct_answer": "2",
+      "topic": "negative_numbers",
+      "subtopic": "addition_with_negatives",
+      "difficulty": "basic",
+      "grade_level": "6-7",
+
+      "expected_reasoning": [
+        "Identify starting point: -3 on number line",
+        "Recognize operation: addition means move right",
+        "Count steps: -3 → -2 → -1 → 0 → 1 → 2 (5 steps)",
+        "Final answer: 2"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "-8",
+          "category": "wrong_operation",
+          "diagnosis": "Subtracted instead of adding (confused by negative sign)",
+          "student_thinking": "Saw negative and plus, did 3 + 5 = 8, made it negative",
+          "hint": "When we see the + sign, are we adding or subtracting?"
+        },
+        {
+          "answer": "8",
+          "category": "conceptual_gap",
+          "diagnosis": "Ignored negative sign completely",
+          "student_thinking": "Just did 3 + 5",
+          "hint": "Look at the negative sign before the 3. Where do we start on the number line?"
+        },
+        {
+          "answer": "1",
+          "category": "close",
+          "diagnosis": "Counting error or off-by-one",
+          "student_thinking": "Right approach but miscounted steps",
+          "hint": "You're very close! Let's count together: -3, -2, -1, 0, 1, 2. How many is that?"
+        },
+        {
+          "answer": "3",
+          "category": "close",
+          "diagnosis": "Added magnitude without considering starting point",
+          "student_thinking": "Forgot to start at -3",
+          "hint": "Remember we're starting at -3, not zero. Try using a number line."
+        }
+      ],
+
+      "hint_progression": [
+        "Think about where we start on the number line.",
+        "We're at -3. When adding, do we move left or right?",
+        "Let's count together: -3, -2, -1, 0, 1, 2. That's 5 steps, right?",
+        "Starting at -3 and moving right 5 spaces lands us on 2."
+      ],
+
+      "test_conversation": [
+        {
+          "turn": 1,
+          "student_input": "-8",
+          "expected_category": "wrong_operation",
+          "expected_triage_path": "is_answer=true → verify=false → wrong_operation",
+          "expected_response_themes": ["operation", "adding", "subtracting", "+"]
+        },
+        {
+          "turn": 2,
+          "student_input": "adding",
+          "expected_category": "stuck",
+          "expected_triage_path": "is_answer=false → stuck",
+          "expected_response_themes": ["number line", "direction", "move"]
+        },
+        {
+          "turn": 3,
+          "student_input": "2",
+          "expected_category": "correct",
+          "expected_triage_path": "is_answer=true → verify=true → correct",
+          "expected_response_themes": ["explain", "reasoning", "how"]
+        }
+      ]
+    },
+
+    {
+      "id": "neg_sub_1",
+      "priority": "must_test",
+      "problem": "What is 5 - (-3)?",
+      "correct_answer": "8",
+      "topic": "negative_numbers",
+      "subtopic": "subtracting_negatives",
+      "difficulty": "intermediate",
+      "grade_level": "7-8",
+
+      "expected_reasoning": [
+        "Recognize: subtracting a negative = adding",
+        "Transform: 5 - (-3) becomes 5 + 3",
+        "Calculate: 5 + 3 = 8"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "2",
+          "category": "wrong_operation",
+          "diagnosis": "Treated as regular subtraction (ignored negative)",
+          "hint": "What happens when we subtract a negative number?"
+        },
+        {
+          "answer": "-8",
+          "category": "conceptual_gap",
+          "diagnosis": "Made result negative (sign confusion)",
+          "hint": "Let's think about what 'minus a negative' means. It actually becomes addition!"
+        }
+      ],
+
+      "hint_progression": [
+        "What does it mean to subtract a negative number?",
+        "Subtracting a negative is the same as adding a positive. So 5 - (-3) = 5 + 3.",
+        "Now try 5 + 3. What do you get?"
+      ]
+    },
+
+    {
+      "id": "word_neg_1",
+      "priority": "must_test",
+      "problem": "The temperature was 2°C. It dropped 5 degrees. What is the new temperature?",
+      "correct_answer": "-3",
+      "topic": "negative_numbers",
+      "subtopic": "real_world_application",
+      "difficulty": "intermediate",
+      "grade_level": "6-7",
+
+      "expected_reasoning": [
+        "Starting temperature: 2°C",
+        "Dropped means subtract: 2 - 5",
+        "Calculate: 2 - 5 = -3",
+        "Final answer: -3°C (below zero)"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "7",
+          "category": "wrong_operation",
+          "diagnosis": "Added instead of subtracted",
+          "hint": "When temperature drops, are we adding or subtracting?"
+        },
+        {
+          "answer": "3",
+          "category": "conceptual_gap",
+          "diagnosis": "Calculated correctly but forgot negative sign",
+          "hint": "If we go below zero, is the temperature positive or negative?"
+        },
+        {
+          "answer": "negative three degrees",
+          "category": "correct",
+          "diagnosis": "Correct (written form)",
+          "note": "Accept written form of -3"
+        },
+        {
+          "answer": "negative three",
+          "category": "correct",
+          "diagnosis": "Correct (written form)",
+          "note": "Accept written form of -3"
+        }
+      ],
+
+      "hint_progression": [
+        "Let's break it down. What's our starting temperature?",
+        "If it drops 5 degrees from 2°C, what operation do we use?",
+        "What is 2 - 5? Use a number line if it helps.",
+        "When we go below zero, what kind of number is that?"
+      ],
+
+      "test_conversation": [
+        {
+          "turn": 1,
+          "student_input": "what does dropped mean?",
+          "expected_category": "conceptual_question",
+          "expected_triage_path": "is_answer=false → conceptual_question",
+          "expected_response_themes": ["subtract", "goes down", "lower"]
+        },
+        {
+          "turn": 2,
+          "student_input": "-3",
+          "expected_category": "correct",
+          "expected_triage_path": "is_answer=true → verify=true → correct",
+          "expected_response_themes": ["explain", "how", "reasoning"]
+        }
+      ]
+    },
+
+    {
+      "id": "frac_add_1",
+      "priority": "must_test",
+      "problem": "What is 1/2 + 1/4?",
+      "correct_answer": "3/4",
+      "topic": "fractions",
+      "subtopic": "addition",
+      "difficulty": "basic",
+      "grade_level": "4-5",
+
+      "expected_reasoning": [
+        "Find common denominator: 4",
+        "Convert 1/2 to 2/4",
+        "Add numerators: 2/4 + 1/4 = 3/4"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "2/6",
+          "category": "wrong_operation",
+          "diagnosis": "Added numerators and denominators separately",
+          "hint": "Can we add fractions when they have different denominators?"
+        },
+        {
+          "answer": "0.75",
+          "category": "correct",
+          "diagnosis": "Decimal form is correct",
+          "note": "Accept 0.75 as equivalent to 3/4"
+        },
+        {
+          "answer": "2/4",
+          "category": "close",
+          "diagnosis": "Only converted 1/2, forgot to add 1/4",
+          "hint": "You converted 1/2 to 2/4. Great! Now what do we do with the 1/4?"
+        }
+      ],
+
+      "hint_progression": [
+        "Can we add these fractions directly, or do we need a common denominator?",
+        "What's a common denominator for 2 and 4?",
+        "If we convert 1/2 to fourths, what do we get?",
+        "Now add 2/4 + 1/4. What's the result?"
+      ]
+    },
+
+    {
+      "id": "neg_sub_2",
+      "priority": "must_test",
+      "problem": "What is -3 - 5?",
+      "correct_answer": "-8",
+      "topic": "negative_numbers",
+      "subtopic": "subtraction_resulting_in_negative",
+      "difficulty": "basic",
+      "grade_level": "6-7",
+
+      "expected_reasoning": [
+        "Start at -3 on number line",
+        "Subtracting 5 means move left 5 spaces",
+        "-3 → -4 → -5 → -6 → -7 → -8",
+        "Final answer: -8"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "2",
+          "category": "wrong_operation",
+          "diagnosis": "Added instead of subtracted, or ignored signs",
+          "hint": "Are we adding or subtracting? Watch the operation sign."
+        },
+        {
+          "answer": "8",
+          "category": "conceptual_gap",
+          "diagnosis": "Got magnitude right but wrong sign",
+          "hint": "If we start at -3 and move further left (subtract), do we get more negative or more positive?"
+        }
+      ],
+
+      "hint_progression": [
+        "Let's use a number line. Where do we start?",
+        "When we subtract, do we move left or right?",
+        "Starting at -3, move left 5 spaces. Where do you land?",
+        "Count with me: -3, -4, -5, -6, -7, -8."
+      ]
+    },
+
+    {
+      "id": "off_topic_test",
+      "priority": "must_test",
+      "problem": "What is -3 + 5?",
+      "note": "Manual test for off-topic detection",
+      "test_inputs": [
+        {
+          "student_input": "What's for lunch?",
+          "expected_category": "off_topic",
+          "expected_response_themes": ["focus", "math", "problem", "later"]
+        },
+        {
+          "student_input": "I like pizza",
+          "expected_category": "off_topic",
+          "expected_response_themes": ["focus", "math", "problem"]
+        },
+        {
+          "student_input": "Can we play a game?",
+          "expected_category": "off_topic",
+          "expected_response_themes": ["focus", "math", "problem"]
+        }
+      ]
+    },
+
+    {
+      "id": "order_ops_1",
+      "priority": "nice_to_have",
+      "problem": "What is 2 + 3 × 4?",
+      "correct_answer": "14",
+      "topic": "order_of_operations",
+      "subtopic": "pemdas",
+      "difficulty": "intermediate",
+      "grade_level": "6-7",
+
+      "expected_reasoning": [
+        "Apply PEMDAS: multiplication before addition",
+        "Calculate: 3 × 4 = 12",
+        "Then: 2 + 12 = 14"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "20",
+          "category": "wrong_operation",
+          "diagnosis": "Did addition first (ignored order of operations)",
+          "hint": "Remember PEMDAS. Which operation do we do first: addition or multiplication?"
+        }
+      ],
+
+      "hint_progression": [
+        "Do we do addition or multiplication first?",
+        "PEMDAS says multiplication comes before addition. So we do 3 × 4 first.",
+        "What is 3 × 4?",
+        "Now add 2 to that result."
+      ]
+    },
+
+    {
+      "id": "neg_mult_1",
+      "priority": "nice_to_have",
+      "problem": "What is -2 × 3?",
+      "correct_answer": "-6",
+      "topic": "negative_numbers",
+      "subtopic": "multiplication_with_negatives",
+      "difficulty": "intermediate",
+      "grade_level": "7-8",
+
+      "expected_reasoning": [
+        "Multiply magnitudes: 2 × 3 = 6",
+        "Apply sign rule: negative × positive = negative",
+        "Final answer: -6"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "6",
+          "category": "conceptual_gap",
+          "diagnosis": "Forgot to apply negative sign",
+          "hint": "When we multiply a negative by a positive, is the result positive or negative?"
+        },
+        {
+          "answer": "-5",
+          "category": "wrong_operation",
+          "diagnosis": "Added instead of multiplied",
+          "hint": "Are we adding or multiplying here?"
+        }
+      ]
+    },
+
+    {
+      "id": "frac_sub_1",
+      "priority": "nice_to_have",
+      "problem": "What is 2/3 - 1/6?",
+      "correct_answer": "1/2",
+      "topic": "fractions",
+      "subtopic": "subtraction",
+      "difficulty": "intermediate",
+      "grade_level": "5-6",
+
+      "expected_reasoning": [
+        "Find common denominator: 6",
+        "Convert 2/3 to 4/6",
+        "Subtract: 4/6 - 1/6 = 3/6",
+        "Simplify: 3/6 = 1/2"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "1/3",
+          "category": "wrong_operation",
+          "diagnosis": "Subtracted numerators without common denominator",
+          "hint": "Did you find a common denominator first?"
+        },
+        {
+          "answer": "3/6",
+          "category": "close",
+          "diagnosis": "Correct but not simplified",
+          "hint": "Your answer is correct! Can you simplify 3/6?"
+        },
+        {
+          "answer": "0.5",
+          "category": "correct",
+          "diagnosis": "Decimal form is correct",
+          "note": "Accept 0.5 as equivalent to 1/2"
+        }
+      ]
+    },
+
+    {
+      "id": "word_debt_1",
+      "priority": "nice_to_have",
+      "problem": "Sarah had 3 apples. She gave away 5 apples. How many apples does she have now?",
+      "correct_answer": "-2",
+      "topic": "negative_numbers",
+      "subtopic": "real_world_application_debt",
+      "difficulty": "intermediate",
+      "grade_level": "6-7",
+
+      "expected_reasoning": [
+        "Starting amount: 3 apples",
+        "Gave away: 5 apples",
+        "Calculate: 3 - 5 = -2",
+        "Interpret: She owes 2 apples (negative/debt concept)"
+      ],
+
+      "common_errors": [
+        {
+          "answer": "2",
+          "category": "conceptual_gap",
+          "diagnosis": "Got magnitude but missed negative (debt concept)",
+          "hint": "If Sarah gave away more than she had, what does that mean? Can we have a negative number of apples?"
+        },
+        {
+          "answer": "0",
+          "category": "conceptual_gap",
+          "diagnosis": "Thinks you can't go below zero in real world",
+          "hint": "In real life, if you give away more than you have, you owe someone. That's like having a negative amount!"
+        }
+      ],
+
+      "hint_progression": [
+        "How many apples did Sarah start with?",
+        "If she gives away 5 but only has 3, what happens?",
+        "We can write this as 3 - 5. What's that equal to?",
+        "When we owe something, we can represent that with a negative number!"
+      ]
+    }
+  ]
+}
