@@ -1,0 +1,929 @@
+{
+  "name": "Stigmi",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tutor/message",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b569024f-af12-4972-814e-6047449ea5e8",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -3616,
+        208
+      ],
+      "webhookId": "tutor-message",
+      "notes": "Receives: {student_id, session_id, message, current_problem: {id, text, correct_answer}}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Load or initialize session from workflow static data\nconst sessionId = $input.item.json.session_id;\nconst studentId = $input.item.json.student_id;\nconst currentProblem = $input.item.json.current_problem;\n\n// Get existing sessions from workflow static data\nconst sessions = $getWorkflowStaticData('global')?.sessions || {};\n\nlet session = sessions[sessionId];\n\n// Check if session exists and hasn't expired (30-minute TTL)\nif (session) {\n  const lastActive = new Date(session.last_active);\n  const now = new Date();\n  const minutesInactive = (now - lastActive) / 1000 / 60;\n\n  if (minutesInactive > 30) {\n    // Session expired - treat as new session\n    session = null;\n  }\n}\n\nif (!session) {\n  // Create new session\n  session = {\n    session_id: sessionId,\n    student_id: studentId,\n    created_at: new Date().toISOString(),\n    last_active: new Date().toISOString(),\n    current_problem: {\n      id: currentProblem.id,\n      text: currentProblem.text,\n      correct_answer: currentProblem.correct_answer,\n      attempt_count: 0\n    },\n    recent_turns: [],\n    stats: {\n      total_turns: 0,\n      problems_attempted: 1,\n      problems_solved: 0\n    }\n  };\n}\n\n// Check if problem changed\nif (session.current_problem.id !== currentProblem.id) {\n  session.current_problem = {\n    id: currentProblem.id,\n    text: currentProblem.text,\n    correct_answer: currentProblem.correct_answer,\n    attempt_count: 0\n  };\n  session.stats.problems_attempted++;\n}\n\n// Add start time for latency tracking\nconst startTime = Date.now();\n\nreturn {\n  json: {\n    ...$input.item.json,\n    session: session,\n    _session_id: sessionId,\n    _start_time: startTime\n  }\n};"
+      },
+      "id": "57f5881d-3d27-42f2-b845-547a1adf8d8f",
+      "name": "Load Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3248,
+        -64
+      ],
+      "notes": "Loads session from workflow static data, adds start_time for latency tracking"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Is this student input an answer attempt to the problem, or something else?\n\n  Problem: {{$json.current_problem.text}}\n  Student input: \"{{$json._original_payload.chatInput}}\"\n\n  Respond with JSON only:\n  {\n    \"is_answer\": true/false,\n    \"confidence\": 0.0-1.0\n  }\n\n  Examples:\n  \"2\" → {\"is_answer\": true, \"confidence\": 0.99}\n  \"I don't know\" → {\"is_answer\": false, \"confidence\": 0.95}\n  \"What is a negative number?\" → {\"is_answer\": false, \"confidence\": 0.98}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 50,
+          "temperature": 0.1
+        }
+      },
+      "id": "323ff0e9-73f6-4d6a-9855-a8900522c334",
+      "name": "Stage 1: Is Answer?",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -3136,
+        -256
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "LLM classifies: is student giving an answer or asking/helping/off-topic?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hybrid Triage: Rule-based + LLM fallback\n  const input = $input.item.json;\n  const llmOutput = Array.isArray(input) ? input[0] : input;\n  const llmResponse = llmOutput.message?.content || llmOutput.text || '{}';\n\n  // Get original message from Load Session\n  const loadSessionData = $('Load Session').item.json;\n  const originalMessage = loadSessionData.message.trim();\n\n  let triageResult;\n\n  // Rule 1: If it's numeric or a simple mathematical expression, it's an answer\n  const isNumeric = /^-?\\d+\\.?\\d*$/.test(originalMessage);\n  const isMathExpression = /^-?\\d+[\\d\\s+\\-*/().]+\\d+$/.test(originalMessage);\n  const isWrittenNumber =\n  /^(negative|minus)?\\s*(zero|one|two|three|four|five|six|seven|eight|nine|ten)$/i.test(originalMessage);\n\n  if (isNumeric || isMathExpression || isWrittenNumber) {\n    // Definitely an answer\n    triageResult = {\n      is_answer: true,\n      confidence: 0.99,\n      method: 'rule-based'\n    };\n  }\n  // Rule 2: If it contains common non-answer phrases, it's NOT an answer\n  else if (/^(what|why|how|help|stuck|don't know|idk)/i.test(originalMessage)) {\n    triageResult = {\n      is_answer: false,\n      confidence: 0.95,\n      method: 'rule-based'\n    };\n  }\n  // Otherwise, use LLM classification\n  else {\n    try {\n      triageResult = JSON.parse(llmResponse);\n      triageResult.method = 'llm';\n    } catch (e) {\n      // LLM failed, default to treating as answer if short\n      triageResult = {\n        is_answer: originalMessage.length < 20,\n        confidence: 0.5,\n        method: 'fallback'\n      };\n    }\n  }\n\n  return {\n    json: {\n      ...loadSessionData,\n      triage_stage1: triageResult,\n      is_answer: triageResult.is_answer\n    }\n  };"
+      },
+      "id": "ae74cfdd-c7c7-4ec4-bf09-55a4604d36a3",
+      "name": "Parse Triage Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2848,
+        -64
+      ],
+      "notes": "Extracts is_answer from LLM JSON, with fallback to regex if parsing fails"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.is_answer}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "c8db402f-9059-42ab-bb9b-21d8f218855d",
+      "name": "If Answer",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -2640,
+        -64
+      ],
+      "notes": "Branch: TRUE → verify answer, FALSE → classify non-answer intent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verify answer with sanitized eval (no math.js in n8n)\nconst studentInput = $input.item.json.message;\nconst correctAnswer = $input.item.json.current_problem.correct_answer;\n\nfunction verifyAnswer(studentInput, correctAnswer) {\n  try {\n    // Clean input\n    let cleaned = studentInput.trim().toLowerCase();\n\n    // Handle written numbers\n    const numberWords = {\n      'zero': '0', 'one': '1', 'two': '2', 'three': '3',\n      'four': '4', 'five': '5', 'six': '6', 'seven': '7',\n      'eight': '8', 'nine': '9', 'ten': '10',\n      'negative': '-', 'minus': '-'\n    };\n\n    for (let [word, digit] of Object.entries(numberWords)) {\n      const regex = new RegExp('\\\\b' + word + '\\\\b', 'g');\n      cleaned = cleaned.replace(regex, digit);\n    }\n\n    // Remove extra spaces\n    cleaned = cleaned.replace(/\\s+/g, '');\n\n    // Sanitize before eval (security)\n    const sanitized = cleaned.replace(/[^0-9+\\-*/().]/g, '');\n    if (sanitized !== cleaned && cleaned !== '') {\n      throw new Error('Invalid characters in input');\n    }\n\n    // Evaluate both\n    const studentVal = parseFloat(eval(sanitized || '0'));\n    const correctVal = parseFloat(eval(correctAnswer));\n\n    // Calculate difference\n    const diff = Math.abs(studentVal - correctVal);\n    const tolerance = 0.001;\n\n    // Improved close threshold: 20% with min 0.3 and max 2.0\n    // This handles both small numbers (0.2) and large numbers (20) appropriately\n    const percentThreshold = Math.abs(correctVal * 0.2);\n    const closeThreshold = Math.min(Math.max(percentThreshold, 0.3), 2.0);\n\n    return {\n      correct: diff < tolerance,\n      close: diff >= tolerance && diff < closeThreshold,\n      student_value: studentVal,\n      correct_value: correctVal,\n      difference: diff\n    };\n  } catch (error) {\n    return {\n      correct: false,\n      close: false,\n      error: \"Could not parse as number or expression\",\n      error_message: error.message,\n      raw_input: studentInput\n    };\n  }\n}\n\nconst verification = verifyAnswer(studentInput, correctAnswer);\n\nreturn {\n  json: {\n    ...$input.item.json,\n    verification: verification\n  }\n};"
+      },
+      "id": "4b42011a-9799-424d-83a5-ea3843265781",
+      "name": "Verify Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2448,
+        -160
+      ],
+      "notes": "Sanitized eval (security), handles decimals/fractions/written numbers, 20% threshold"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Stage 2a: Classify answer quality based on verification (rule-based)\nconst verification = $input.item.json.verification;\n\nlet category, confidence;\n\n// Handle verification errors (e.g., unparseable input)\nif (verification.error) {\n  // Treat as 'stuck' - student might not understand what format to use\n  category = 'stuck';\n  confidence = 0.8;\n} else if (verification.correct) {\n  category = 'correct';\n  confidence = 0.99;\n} else if (verification.close) {\n  category = 'close';\n  confidence = 0.95;\n} else {\n  category = 'wrong_operation';\n  confidence = 0.85;\n}\n\nreturn {\n  json: {\n    ...$input.item.json,\n    category: category,\n    confidence: confidence,\n    stage: 'stage2a',\n    verification_failed: verification.error ? true : false\n  }\n};"
+      },
+      "id": "a72cea9f-31ae-461d-ace6-8f2ba1e6cb20",
+      "name": "Stage 2a: Answer Quality",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        -160
+      ],
+      "notes": "Rule-based: correct → correct, close → close, else → wrong_operation"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=The student is NOT giving an answer. What are they doing?\n\n  Problem: {{$json.current_problem.text}}\n  Student input: \"{{$json.message}}\"\n\n  Classify as ONE:\n  - conceptual_question: Asking what a concept means (\"What's a negative number?\")\n  - stuck: Asking for help or saying they don't know (\"I don't know\", \"help\", \"I'm stuck\")\n  - off_topic: Unrelated to the problem (\"What's for lunch?\", random chat)\n\n  Respond with JSON only:\n  {\n    \"category\": \"one of above\",\n    \"confidence\": 0.0-1.0\n  }\n\n  Examples:\n  \"What is a negative number?\" → {\"category\": \"conceptual_question\", \"confidence\": 0.98}\n  \"I don't know\" → {\"category\": \"stuck\", \"confidence\": 0.95}\n  \"What's for lunch?\" → {\"category\": \"off_topic\", \"confidence\": 0.99}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 100,
+          "temperature": 0.1
+        }
+      },
+      "id": "c8fb25f8-fe00-49e5-a12e-b98fa0ac63eb",
+      "name": "Stage 2b: Non-Answer Intent",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -2528,
+        224
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "LLM classifies non-answers: conceptual_question, stuck, or off_topic"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Stage 2b result\nconst llmResponse = $input.item.json.message?.content || $input.item.json.text || '{}';\n\n// Get data from Parse Triage Result (passed through Stage 2b)\nconst triageData = $('Parse Triage Result').item.json;\nconst originalMessage = triageData.message;\n\nlet triageResult;\n\ntry {\n  triageResult = JSON.parse(llmResponse);\n} catch (e) {\n  // Fallback classification based on keywords\n  const messageLower = originalMessage.toLowerCase();\n  if (messageLower.includes('what') || messageLower.includes('?')) {\n    triageResult = { category: 'conceptual_question', confidence: 0.7, fallback: true };\n  } else if (messageLower.includes('don\\'t know') || messageLower.includes('help') || messageLower.includes('stuck')) {\n    triageResult = { category: 'stuck', confidence: 0.8, fallback: true };\n  } else {\n    triageResult = { category: 'off_topic', confidence: 0.6, fallback: true };\n  }\n}\n\nreturn {\n  json: {\n    ...triageData,\n    category: triageResult.category,\n    confidence: triageResult.confidence,\n    stage: 'stage2b'\n  }\n};"
+      },
+      "id": "e35eb5c7-1e3b-4fcc-b041-3677241230f7",
+      "name": "Parse Stage 2b",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        48
+      ],
+      "notes": "Extracts category from LLM JSON, with keyword fallback"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enrich context with attempt count, escalation level, and formatted chat history\nconst session = $input.item.json.session;\nconst category = $input.item.json.category;\nconst isAnswer = $input.item.json.is_answer;\n\n// Get current attempt count (will increment later if answer)\nconst attemptCount = session.current_problem.attempt_count + (isAnswer ? 1 : 0);\n\n// Determine escalation level\nlet escalationLevel;\nif (attemptCount <= 1) {\n  escalationLevel = 'probe';\n} else if (attemptCount === 2) {\n  escalationLevel = 'hint';\n} else {\n  escalationLevel = 'teach';\n}\n\n// Format chat history for LLM context\nconst chatHistory = session.recent_turns.map((turn, i) => {\n  return `Turn ${i + 1}:\\nStudent: \"${turn.student_input}\"\\nTutor: \"${turn.tutor_response}\"`;\n}).join('\\n\\n');\n\nreturn {\n  json: {\n    ...$input.item.json,\n    attempt_count: attemptCount,\n    escalation_level: escalationLevel,\n    chat_history: chatHistory\n  }\n};"
+      },
+      "id": "f0738050-9ea4-4c4c-b02d-958e6920c9a7",
+      "name": "Enrich Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2048,
+        -64
+      ],
+      "notes": "Adds attempt_count, escalation_level (probe/hint/teach), formatted chat_history"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.category}}",
+                    "rightValue": "correct",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f2730a2d-c83f-4578-b43c-cba4ac33ba5d"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "correct"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.category}}",
+                    "rightValue": "close",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "7aa208f0-a386-40e6-97e3-e1d9383c9dd7"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "close"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.category}}",
+                    "rightValue": "wrong_operation",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "03091a63-a69f-491e-b02c-f8414f24cb31"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "wrong_operation"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.category}}",
+                    "rightValue": "conceptual_question",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "819f2d28-0eff-4133-9353-0ebb60ad8285"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "conceptual_question"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.category}}",
+                    "rightValue": "stuck",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a2f03eec-df1f-4283-8b1d-0ec5b9140b1a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "stuck"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.category}}",
+                    "rightValue": "off_topic",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "9c82a4d3-7a63-462f-9c50-7b36347e26c6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "off_topic"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "ff0965d6-c491-4642-8f7a-3f224f8abe82",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -1840,
+        -64
+      ],
+      "notes": "6-way router: sends to appropriate response generator"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an encouraging math tutor. The student just gave the CORRECT answer.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} ✓ CORRECT\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Get them to explain their reasoning (teach-back method).\n\n{{$json.attempt_count === 1 ? 'They got it right on the first try! Ask them to walk you through their thinking.' : 'They worked through it and got there! Ask them to explain how they figured it out.'}}\n\nRules:\n- Celebrate their success briefly (1-2 words: \"Perfect!\", \"Excellent!\")\n- Ask them to explain their reasoning in their own words\n- 1-2 sentences total\n- Encouraging, warm tone\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 150,
+          "temperature": 0.7
+        }
+      },
+      "id": "b20d918f-bd7e-4989-95ec-e7c60f841423",
+      "name": "Response: Correct",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -1648,
+        -368
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "TEACH-BACK: Celebrate + ask for explanation"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a patient math tutor using Socratic questioning.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} (incorrect but close to {{$json.current_problem.correct_answer}})\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n{{$json.attempt_count === 1 ? 'Give a gentle probing question to help them spot their small error.' : $json.attempt_count === 2 ? 'Give a more explicit hint about where the error is.' : \"They've tried 3+ times. Walk through one step explicitly, then let them finish.\"}}\n\nRules:\n- 1-2 sentences maximum\n- Ask, don't tell (unless attempt 3+)\n- Use concrete examples (number line, objects, drawings)\n- Encouraging, patient tone\n- DO NOT give the final answer\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 150,
+          "temperature": 0.7
+        }
+      },
+      "id": "563c6ddf-be37-4572-9823-03e36fb7efc6",
+      "name": "Response: Close",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -1648,
+        -240
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "PROBE: Gentle questions, escalate to explicit hints on attempt 3+"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a patient math tutor. The student's answer suggests they misunderstood the operation or concept.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} (should be {{$json.current_problem.correct_answer}})\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n{{$json.attempt_count === 1 ? 'Ask a clarifying question about the operation or concept.' : $json.attempt_count === 2 ? 'Give a more direct hint about the operation or concept.' : \"They've tried 3+ times. Teach the concept directly with an example, then ask them to try.\"}}\n\nRules:\n- Focus on the specific misconception\n- Use concrete examples (number line, real-world objects)\n- 2-3 sentences for teaching (attempt 3+), 1 sentence for questions (attempts 1-2)\n- Patient, non-judgmental tone\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 200,
+          "temperature": 0.7
+        }
+      },
+      "id": "8dc0ee60-bd2b-4c74-a763-284a55a9f3cc",
+      "name": "Response: Wrong Operation",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -1648,
+        -128
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "CLARIFY: Address misconception, teach concept on attempt 3+"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a patient math tutor. The student is asking a conceptual question.\n\nProblem: {{$json.current_problem.text}}\nStudent's question: \"{{$json.message}}\"\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Teach the concept using simple, concrete examples.\n\nTeaching strategy:\n1. Give a brief, simple definition (1 sentence)\n2. Provide a concrete example (number line, real-world scenario)\n3. Ask a check question to see if they understood\n\nRules:\n- Use age-appropriate language\n- Concrete examples (number line for negatives, pizza slices for fractions, etc.)\n- 2-3 sentences total\n- End with a simple check question related to the original problem\n- Encouraging tone\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 200,
+          "temperature": 0.7
+        }
+      },
+      "id": "3f3ff116-c510-4cb7-a8af-b7042006dc17",
+      "name": "Response: Conceptual",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -1632,
+        192
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "CONCEPT: Teach with examples, end with check question"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a patient math tutor. The student is stuck or asking for help.\n\nProblem: {{$json.current_problem.text}}\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Break the problem into smaller, manageable steps.\n\n{{$json.attempt_count === 1 ? 'Start with the very first step and ask them to do just that one step.' : $json.attempt_count === 2 ? 'Give them the first step, then ask them to do the second step.' : \"They've tried multiple times. Walk through most of the problem step-by-step, leaving only the final step for them.\"}}\n\nRules:\n- Break into the smallest possible next step\n- 1-2 sentences\n- Encouraging tone (\"Let's...\", \"We can...\")\n- Ask a specific, focused question\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 200,
+          "temperature": 0.7
+        }
+      },
+      "id": "b6abacb6-833d-4168-9809-1745aef63c33",
+      "name": "Response: Stuck",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -1632,
+        352
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "SCAFFOLD: Break into tiny steps, more help on attempt 3+"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a friendly but focused math tutor. The student went off-topic.\n\nProblem: {{$json.current_problem.text}}\nStudent said: \"{{$json.message}}\" (unrelated to the problem)\n\nYour goal: Politely redirect them back to the math problem.\n\nRules:\n- Acknowledge their input very briefly (1-2 words if appropriate)\n- Gently redirect to the problem\n- 1 sentence total\n- Warm, friendly tone (not scolding)\n- Re-state the problem or ask them to focus\n\nExamples:\n- \"Ha! Let's save that for later. Right now, what do you think the answer is?\"\n- \"I hear you! But first, can you help me with this problem?\"\n- \"Let's focus on the math for now. What's your answer?\"\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 100,
+          "temperature": 0.7
+        }
+      },
+      "id": "319cdb26-95f6-46e4-9a0f-e55d139cbb1b",
+      "name": "Response: Off-Topic",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -1632,
+        496
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "REDIRECT: Politely refocus on problem"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract response from whichever LLM node executed\n  const llmOutput = $input.item.json;\n  const response = llmOutput.message?.content || llmOutput.text || \"I'm here to help you learn!\";\n\n  // Get data from Enrich Context node\n  const enrichContext = $('Enrich Context').item.json;\n  const startTime = enrichContext._start_time;\n  const latency = Date.now() - startTime;\n\n  // Build turn object\n  const turn = {\n    student_input: enrichContext.message,\n    is_answer: enrichContext.is_answer,\n    category: enrichContext.category,\n    verification: enrichContext.verification || null,\n    tutor_response: response,\n    latency_ms: latency,\n    timestamp: new Date().toISOString()\n  };\n\n  // Update session\n  const session = enrichContext.session;\n\n  // Increment attempt count if was an answer (for next turn)\n  if (enrichContext.is_answer) {\n    session.current_problem.attempt_count++;\n  }\n\n  // Mark problem solved if correct\n  if (enrichContext.category === 'correct') {\n    session.stats.problems_solved++;\n  }\n\n  // Add turn to recent history\n  session.recent_turns.push(turn);\n\n  // Trim to last 5 turns\n  if (session.recent_turns.length > 5) {\n    session.recent_turns = session.recent_turns.slice(-5);\n  }\n\n  // Update metadata\n  session.last_active = new Date().toISOString();\n  session.stats.total_turns++;\n\n  // Save session to workflow static data\n  const staticData = $getWorkflowStaticData('global');\n  if (!staticData.sessions) {\n    staticData.sessions = {};\n  }\n  staticData.sessions[enrichContext._session_id] = session;\n\n  // Return final response\n  return {\n    json: {\n      output: response  // Chat trigger looks for 'output' field\n    }\n  };"
+      },
+      "id": "30763756-720e-4112-88fc-36aabea1a9b3",
+      "name": "Update Session & Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        -64
+      ],
+      "notes": "Calculates latency, updates session, saves to static data, formats API response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "56438719-2ea3-4f45-9ff7-259879019779",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -864,
+        208
+      ],
+      "notes": "Returns: {response: string, metadata: {...}}"
+    },
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "Hi there! 👋\n\nMy name is Nathan. Ready to learn math?\nHere's your first problem:\nWhat is -3 + 5?",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -3616,
+        -208
+      ],
+      "id": "9675d657-6805-4fde-80ad-92abfcbf084c",
+      "name": "When chat message received",
+      "webhookId": "d6075ce6-263d-4b56-82b1-de4f2f013f73"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Input - Transform chat and webhook payloads to consistent format\n  const inputData = $input.item.json;\n\n  // Detect source type\n  let source = 'unknown';\n  let normalizedData = {};\n\n  // Check if this is from Chat Trigger\n  if (inputData.chatId || inputData.chat || inputData.sessionId) {\n    source = 'chat';\n\n    // Map chat fields to expected format\n    normalizedData = {\n      session_id: inputData.chatId || inputData.sessionId || inputData.chat?.id || `chat_${Date.now()}`,\n      student_id: inputData.userId || inputData.user?.id || inputData.from || 'unknown_user',\n      message: inputData.chatInput || inputData.message || inputData.text || inputData.chatMessage || '',\n\n      // Default problem if none provided\n      current_problem: inputData.current_problem || {\n        id: 'default_problem_1',\n        text: 'What is -3 + 5?',\n        correct_answer: '2'\n      },\n\n      // Metadata\n      _source: 'chat',\n      _original_payload: inputData\n    };\n  }\n  // Check if this is from Webhook Trigger\n  else if (inputData.session_id || inputData.student_id || inputData.current_problem) {\n    source = 'webhook';\n\n    // Webhook already in correct format, just pass through\n    normalizedData = {\n      session_id: inputData.session_id,\n      student_id: inputData.student_id,\n      message: inputData.message,\n      current_problem: inputData.current_problem,\n\n      // Metadata\n      _source: 'webhook',\n      _original_payload: inputData\n    };\n  }\n  // Unknown source - try best guess\n  else {\n    source = 'unknown';\n\n    normalizedData = {\n      session_id: inputData.id || `session_${Date.now()}`,\n      student_id: inputData.user || 'unknown',\n      message: inputData.chatInput || inputData.message || inputData.text || '',\n      current_problem: {\n        id: 'default_problem_1',\n        text: 'What is -3 + 5?',\n        correct_answer: '2'\n      },\n\n      // Metadata\n      _source: 'unknown',\n      _original_payload: inputData,\n      _warning: 'Could not detect source type, using defaults'\n    };\n  }\n\n  return {\n    json: normalizedData\n  };"
+      },
+      "id": "ad295a57-97bb-4f11-9740-779abaeea81e",
+      "name": "Normalize input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3408,
+        -64
+      ],
+      "notes": "Loads session from workflow static data, adds start_time for latency tracking"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract response from whichever LLM node executed\n  const llmOutput = $input.item.json;\n  const response = llmOutput.message?.content || llmOutput.text || \"I'm here to help you learn!\";\n\n  // Get data from Enrich Context node\n  const enrichContext = $('Enrich Context').item.json;\n  const startTime = enrichContext._start_time;\n  const latency = Date.now() - startTime;\n\n  // Build turn object\n  const turn = {\n    student_input: enrichContext.message,\n    is_answer: enrichContext.is_answer,\n    category: enrichContext.category,\n    verification: enrichContext.verification || null,\n    tutor_response: response,\n    latency_ms: latency,\n    timestamp: new Date().toISOString()\n  };\n\n  // Update session\n  const session = enrichContext.session;\n\n  // Increment attempt count if was an answer (for next turn)\n  if (enrichContext.is_answer) {\n    session.current_problem.attempt_count++;\n  }\n\n  // Mark problem solved if correct\n  if (enrichContext.category === 'correct') {\n    session.stats.problems_solved++;\n  }\n\n  // Add turn to recent history\n  session.recent_turns.push(turn);\n\n  // Trim to last 5 turns\n  if (session.recent_turns.length > 5) {\n    session.recent_turns = session.recent_turns.slice(-5);\n  }\n\n  // Update metadata\n  session.last_active = new Date().toISOString();\n  session.stats.total_turns++;\n\n  // Save session to workflow static data\n  const staticData = $getWorkflowStaticData('global');\n  if (!staticData.sessions) {\n    staticData.sessions = {};\n  }\n  staticData.sessions[enrichContext._session_id] = session;\n\n  // Return final response\n  return {\n    json: {\n      response: response,\n      metadata: {\n        category: enrichContext.category,\n        confidence: enrichContext.confidence,\n        is_answer: enrichContext.is_answer,\n        verification: enrichContext.verification,\n        attempt_count: enrichContext.attempt_count,\n        escalation_level: enrichContext.escalation_level,\n        latency_ms: latency,\n        timestamp: turn.timestamp\n      }\n    }\n  };"
+      },
+      "id": "ce5d024e-b81d-451e-83a5-a75263f07110",
+      "name": "Update Session & Format Response1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1056,
+        208
+      ],
+      "notes": "Calculates latency, updates session, saves to static data, formats API response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        []
+      ]
+    },
+    "Load Session": {
+      "main": [
+        [
+          {
+            "node": "Stage 1: Is Answer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage 1: Is Answer?": {
+      "main": [
+        [
+          {
+            "node": "Parse Triage Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Triage Result": {
+      "main": [
+        [
+          {
+            "node": "If Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Answer": {
+      "main": [
+        [
+          {
+            "node": "Verify Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage 2b: Non-Answer Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Answer": {
+      "main": [
+        [
+          {
+            "node": "Stage 2a: Answer Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage 2a: Answer Quality": {
+      "main": [
+        [
+          {
+            "node": "Enrich Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage 2b: Non-Answer Intent": {
+      "main": [
+        [
+          {
+            "node": "Parse Stage 2b",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Stage 2b": {
+      "main": [
+        [
+          {
+            "node": "Enrich Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Context": {
+      "main": [
+        [
+          {
+            "node": "Route by Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Category": {
+      "main": [
+        [
+          {
+            "node": "Response: Correct",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response: Close",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response: Wrong Operation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response: Conceptual",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response: Stuck",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response: Off-Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response: Correct": {
+      "main": [
+        [
+          {
+            "node": "Update Session & Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response: Close": {
+      "main": [
+        [
+          {
+            "node": "Update Session & Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response: Wrong Operation": {
+      "main": [
+        [
+          {
+            "node": "Update Session & Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response: Conceptual": {
+      "main": [
+        [
+          {
+            "node": "Update Session & Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response: Stuck": {
+      "main": [
+        [
+          {
+            "node": "Update Session & Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response: Off-Topic": {
+      "main": [
+        [
+          {
+            "node": "Update Session & Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session & Format Response": {
+      "main": [
+        []
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Load Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session & Format Response1": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "fad2617a-9c64-4b56-b10f-7b0cea53a48f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "15fdefe217dd497a3644ac7579dc52a8d91ba7b8a26ac0fbdc9f2ffe89ed0a93"
+  },
+  "id": "Ar0sDK9eGPw0IIIM",
+  "tags": []
+}
