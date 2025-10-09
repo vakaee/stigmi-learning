@@ -41,7 +41,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Format verification result for Build Response Context\nconst inputData = $input.first();\nconst verificationResult = inputData.json.verification_result;\n\nreturn {\n  json: {\n    category: verificationResult.category,\n    confidence: verificationResult.confidence,\n    is_main_problem_attempt: verificationResult.is_main_problem_attempt,\n    verification: null,\n    agent_reasoning: verificationResult.reasoning,\n    tool_used: 'llm_classify_verify',\n    original_category: verificationResult.category\n  }\n};"
+        "jsCode": "// Format verification result for Build Response Context\nconst inputData = $input.first();\nconst verificationResult = inputData.json.verification_result;\n\n// Map teach_back_explanation to stuck for routing (same as Parse Agent Output does for scaffolding)\nlet category = verificationResult.category;\nif (category === 'teach_back_explanation') {\n  category = 'stuck';\n}\n\nreturn {\n  json: {\n    category: category,\n    confidence: verificationResult.confidence,\n    is_main_problem_attempt: verificationResult.is_main_problem_attempt,\n    verification: null,\n    agent_reasoning: verificationResult.reasoning,\n    tool_used: 'llm_classify_verify',\n    original_category: verificationResult.category\n  }\n};"
       },
       "id": "50fb00f5-c52b-42c3-8a30-9ff5a5c4f99b",
       "name": "Format for Routing",
