@@ -317,7 +317,76 @@ This document outlines the constraints and limitations of the Phase 1 prototype.
 
 ---
 
-### 3. No Load Balancing
+### 3. Session Race Conditions
+
+**Limitation**: Concurrent requests for the same session can overwrite each other
+
+**Current behavior**:
+- No locking mechanism for session updates
+- If two requests arrive simultaneously for same session_id:
+  1. Both load identical session state (e.g., attempt_count=1)
+  2. Both process independently
+  3. Both save back to storage
+  4. Second save overwrites first save
+
+**Impact**:
+- Lost session updates (incorrect attempt_count, missing conversation turns)
+- Data inconsistency in high-traffic scenarios
+- Edge case that rarely occurs in POC (single student, ~1 request per 3-10 seconds)
+
+**Example scenario**:
+```
+Time 0ms:   Request A loads session (attempt_count=1)
+Time 10ms:  Request B loads session (attempt_count=1)
+Time 500ms: Request A saves session (attempt_count=2)
+Time 510ms: Request B saves session (attempt_count=2) ← OVERWRITES Request A!
+Result: Only 1 increment instead of 2
+```
+
+**Likelihood in POC**: Very low
+- Typical student response time: 3-10 seconds between messages
+- Would require backend/frontend to send duplicate requests
+- More likely in production with multiple students
+
+**Production solutions**:
+
+**Option A - Optimistic Locking** (recommended for low-medium traffic):
+```javascript
+// Add version number to session
+session.version = session.version + 1;
+
+// On save, check version matches
+if (currentSession.version !== loadedSession.version) {
+  throw new Error('Session modified by another request - retry');
+}
+```
+
+**Option B - Pessimistic Locking** (for high traffic):
+```javascript
+// Acquire lock before loading
+const lock = await acquireLock(sessionId, timeout=1000ms);
+try {
+  // Load, process, save
+} finally {
+  await releaseLock(sessionId);
+}
+```
+
+**Option C - External Session Store** (best for production):
+- Use Redis with WATCH/MULTI/EXEC (atomic transactions)
+- Or use database with row-level locking
+- Handles concurrency automatically
+
+**Workaround for POC**:
+- Not implemented (acceptable risk for single-student prototype)
+- If encountered: restart session or ignore minor inconsistencies
+- Production deployment MUST address this (recommend Redis with transactions)
+
+**Related**: See "Session Storage" limitation (#1) - migrating to Redis solves both issues
+
+---
+
+### 4. No Load Balancing
 
 **Current**: Single n8n instance
 

@@ -3,198 +3,312 @@
   "nodes": [
     {
       "parameters": {
+        "public": true,
+        "initialMessages": "Hi there! 👋\n\nMy name is Nathan. Ready to learn math?\nHere's your first problem:\nWhat is -3 + 5?",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2160,
+        -672
+      ],
+      "id": "726dba79-a01a-4a1f-9535-cfc1de2e08cb",
+      "name": "When chat message received",
+      "webhookId": "d6075ce6-263d-4b56-82b1-de4f2f013f73"
+    },
+    {
+      "parameters": {
+        "options": {
+          "maxTokens": 500,
+          "temperature": 0.2
+        }
+      },
+      "id": "631dacec-8e89-410b-a84a-1a4733f4face",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        -1152,
+        -400
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format verification result for Build Response Context\nconst inputData = $input.first();\nconst verificationResult = inputData.json.verification_result;\n\nreturn {\n  json: {\n    category: verificationResult.category,\n    confidence: verificationResult.confidence,\n    is_main_problem_attempt: verificationResult.is_main_problem_attempt,\n    verification: null,\n    agent_reasoning: verificationResult.reasoning,\n    tool_used: 'llm_classify_verify',\n    original_category: verificationResult.category\n  }\n};"
+      },
+      "id": "50fb00f5-c52b-42c3-8a30-9ff5a5c4f99b",
+      "name": "Format for Routing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -784,
+        -416
+      ],
+      "notes": "Formats verification result to match Build Response Context expectations"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.is_scaffolding_active }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "scaffolding_active"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "e7612391-5be3-43d3-803c-9dc3e06eaee7",
+      "name": "Switch: Scaffolding Active?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -944,
+        -544
+      ],
+      "notes": "Routes to AI Agent only if scaffolding is active"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse LLM extraction and merge with code verification\nconst llmData = $('Code: Verify Answer').first().json;\nconst contextData = $('Prepare Agent Context').first().json;\n\nreturn {\n  json: {\n    student_message: contextData.student_message,\n    current_problem: contextData.current_problem,\n    attempt_count: contextData.attempt_count,\n    is_scaffolding_active: contextData.is_scaffolding_active,\n    scaffolding_depth: contextData.scaffolding_depth,\n    scaffolding_last_question: contextData.scaffolding_last_question,\n    is_teach_back_active: contextData.is_teach_back_active,\n    teach_back_awaiting: contextData.teach_back_awaiting,\n    last_tutor_question: contextData.last_tutor_question,\n    last_category: contextData.last_category,\n    session_id: contextData.session_id,\n    student_id: contextData.student_id,\n    _session: contextData._session,\n    _start_time: contextData._start_time,\n    verification_result: {\n      category: llmData.final_category,\n      is_main_problem_attempt: llmData.is_main_problem_attempt,\n      confidence: llmData.confidence,\n      reasoning: llmData.reasoning\n    }\n  }\n};"
+      },
+      "id": "0d45a5ea-da01-4398-a0f8-929cc09c559d",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        -544
+      ],
+      "notes": "Merges LLM extraction with code verification results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code-based answer verification (Stage 2)\nconst inputData = $input.first();\nconst llmResponse = inputData.json.message?.content || inputData.json.text || '';\nconst contextData = $('Prepare Agent Context').first().json;\n\nlet llmExtraction;\ntry {\n  llmExtraction = JSON.parse(llmResponse);\n  \n  if (!llmExtraction.category) {\n    throw new Error('Missing category field');\n  }\n} catch (error) {\n  // Fallback if JSON parsing fails\n  llmExtraction = {\n    is_answer: false,\n    category: 'stuck',\n    extracted_value: null,\n    confidence: 0.5,\n    reasoning: `Parse error: ${error.message}`\n  };\n}\n\n// If not an answer attempt, pass through unchanged\nif (!llmExtraction.is_answer) {\n  return {\n    json: {\n      final_category: llmExtraction.category,\n      is_main_problem_attempt: false,\n      confidence: llmExtraction.confidence,\n      reasoning: llmExtraction.reasoning,\n      extracted_value: null\n    }\n  };\n}\n\n// Answer attempt - verify numerically\nconst studentValue = llmExtraction.extracted_value;\nconst correctAnswer = contextData.current_problem.correct_answer;\n\n// Parse correct answer\nlet correctValue;\ntry {\n  correctValue = parseFloat(String(correctAnswer).replace(/[^0-9.\\-]/g, ''));\n  if (isNaN(correctValue)) {\n    throw new Error('Cannot parse correct answer');\n  }\n} catch (error) {\n  // Cannot verify - treat as stuck\n  return {\n    json: {\n      final_category: 'stuck',\n      is_main_problem_attempt: false,\n      confidence: 0.5,\n      reasoning: `Verification error: ${error.message}`,\n      extracted_value: studentValue\n    }\n  };\n}\n\n// Check if extracted value is valid\nif (studentValue === null || isNaN(studentValue)) {\n  return {\n    json: {\n      final_category: 'stuck',\n      is_main_problem_attempt: false,\n      confidence: llmExtraction.confidence,\n      reasoning: 'Could not extract numeric value from student response',\n      extracted_value: null\n    }\n  };\n}\n\n// Numeric comparison\nconst diff = Math.abs(studentValue - correctValue);\nconst percentThreshold = Math.abs(correctValue * 0.2); // 20%\nconst closeThreshold = Math.max(percentThreshold, 0.3); // At least 0.3\n\nconst isCorrect = diff < 0.001;\nconst isClose = !isCorrect && diff <= closeThreshold;\n\nlet finalCategory;\nif (isCorrect) {\n  finalCategory = 'correct';\n} else if (isClose) {\n  finalCategory = 'close';\n} else {\n  finalCategory = 'wrong_operation';\n}\n\nreturn {\n  json: {\n    final_category: finalCategory,\n    is_main_problem_attempt: true,\n    confidence: llmExtraction.confidence,\n    reasoning: `Extracted ${studentValue}, correct is ${correctValue}, diff ${diff.toFixed(2)}`,\n    extracted_value: studentValue,\n    correct_value: correctValue,\n    difference: diff\n  }\n};"
+      },
+      "id": "b7c8d9e0-f1a2-3b4c-5d6e-7f8a9b0c1d2e",
+      "name": "Code: Verify Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1248,
+        -688
+      ],
+      "notes": "Verifies numeric answers with 20% threshold logic"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a math tutoring intent classifier and value extractor.\n\nProblem: {{ $json.current_problem.text }}\nStudent's Message: \"{{ $json.student_message }}\"\n\nContext:\n- Scaffolding Active: {{ $json.is_scaffolding_active }}\n- Teach-Back Active: {{ $json.is_teach_back_active }}\n\nYour job: Determine intent and extract numeric values.\n\n**TEACH-BACK SCENARIO**: If teach_back_active = true\nStudent is explaining their reasoning.\nReturn: {\"is_answer\": false, \"category\": \"teach_back_explanation\", \"extracted_value\": null}\n\n**ANSWER ATTEMPT**: Does the message contain a numeric answer?\n- Look for numbers: digits (\"1\", \"2\"), written (\"one\", \"two\"), expressions (\"1/2\", \"0.5\")\n- Include approximations: \"around 2\", \"about two\", \"maybe 1\"\n- \"I think it's one\" = answer attempt ✓\n- \"I don't know what one means\" = NOT an answer ✗\n\nIf YES (answer attempt):\n1. Extract the numeric value (convert written numbers to digits)\n2. Return: {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": <number>}\n\n**NON-ANSWER**: If not an answer attempt:\n- CONCEPTUAL_QUESTION: Asking about concepts (\"what is\", \"why\", \"how does\")\n- STUCK: Indicating confusion/need help (\"don't know\", \"help\", \"stuck\")\n- OFF_TOPIC: Unrelated to math\n\nReturn: {\"is_answer\": false, \"category\": \"conceptual_question|stuck|off_topic\", \"extracted_value\": null}\n\nOUTPUT FORMAT (JSON only):\n{\n  \"is_answer\": true/false,\n  \"category\": \"answer|conceptual_question|stuck|off_topic|teach_back_explanation\",\n  \"extracted_value\": <number or null>,\n  \"confidence\": 0.0-1.0,\n  \"reasoning\": \"brief explanation\"\n}\n\nEXAMPLES:\n\nStudent: \"one\"\n→ {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": 1, \"confidence\": 0.95, \"reasoning\": \"Extracted numeric value 1 from written number\"}\n\nStudent: \"I think it's around two\"\n→ {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": 2, \"confidence\": 0.9, \"reasoning\": \"Approximate answer, extracted value 2\"}\n\nStudent: \"What does negative mean?\"\n→ {\"is_answer\": false, \"category\": \"conceptual_question\", \"extracted_value\": null, \"confidence\": 0.95, \"reasoning\": \"Asking about concept\"}\n\nStudent: \"I don't know\"\n→ {\"is_answer\": false, \"category\": \"stuck\", \"extracted_value\": null, \"confidence\": 0.9, \"reasoning\": \"Indicating need for help\"}\n\nYour response (JSON only):"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 150,
+          "temperature": 0.2
+        }
+      },
+      "id": "f845b5dc-1259-4bcd-ade6-0f3decaa3441",
+      "name": "LLM: Extract Intent & Value",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -1376,
+        -816
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "LLM extracts intent and numeric values from student input"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.session_id }}_problem_{{ $json.current_problem.id }}",
+        "contextWindowLength": 15
+      },
+      "id": "21671599-641e-45d1-8e72-a7e0526df28c",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [
+        -992,
+        -400
+      ],
+      "notes": "Tracks last 15 turns per problem (auto-resets when problem ID changes)"
+    },
+    {
+      "parameters": {
+        "description": "Verifies if a student's numeric answer to the main math problem is correct, close (within 20%), or wrong. Use this ONLY when student gives a numeric answer to the MAIN problem (not a scaffolding question). Returns: {correct: bool, close: bool, student_value: number, correct_value: number}",
+        "jsCode": "// DEBUG: Check what data the tool is receiving\nconsole.log('=== TOOL DEBUG START ===');\nconsole.log('$input:', JSON.stringify($input));\n\ntry {\n  const context = $('Prepare Agent Context').item.json;\n  console.log('Context student_message:', context.student_message);\n  console.log('Context correct_answer:', context.current_problem?.correct_answer);\n  \n  const studentAnswer = String(context.student_message || '').toLowerCase().trim();\n  const correctAnswer = String(context.current_problem.correct_answer || '').toLowerCase().trim();\n  \n  console.log('Parsed studentAnswer:', studentAnswer);\n  console.log('Parsed correctAnswer:', correctAnswer);\n  \n  // Extract just numbers (handle negative, decimals, fractions)\n  let studentNum = studentAnswer.replace(/[^0-9.\\-]/g, '');\n  let correctNum = correctAnswer.replace(/[^0-9.\\-]/g, '');\n  \n  console.log('studentNum:', studentNum, 'correctNum:', correctNum);\n  \n  if (!studentNum || !correctNum) {\n    console.log('ERROR: Could not parse numbers');\n    return 'error: could not parse';\n  }\n  \n  const studentVal = parseFloat(studentNum);\n  const correctVal = parseFloat(correctNum);\n  \n  console.log('studentVal:', studentVal, 'correctVal:', correctVal);\n  \n  if (isNaN(studentVal) || isNaN(correctVal)) {\n    console.log('ERROR: Invalid numbers after parsing');\n    return 'error: invalid number';\n  }\n  \n  const diff = Math.abs(studentVal - correctVal);\n  const percentThreshold = Math.abs(correctVal * 0.2);\n  const closeThreshold = Math.max(percentThreshold, 0.3);\n  \n  const isCorrect = diff < 0.001;\n  const isClose = !isCorrect && diff <= closeThreshold;\n  \n  console.log('diff:', diff, 'isCorrect:', isCorrect, 'isClose:', isClose);\n  \n  // Return ONLY the category keyword - agent must use this exactly\n  let result;\n  if (isCorrect) {\n    result = 'correct';\n  } else if (isClose) {\n    result = 'close';\n  } else {\n    result = 'wrong_operation';\n  }\n  \n  console.log('RETURNING:', result);\n  console.log('=== TOOL DEBUG END ===');\n  return result;\n  \n} catch (error) {\n  console.log('EXCEPTION:', error.message);\n  console.log('=== TOOL DEBUG END (ERROR) ===');\n  return 'error: exception - ' + error.message;\n}"
+      },
+      "id": "86b14e78-13f8-4313-a0c2-e8f2797bab23",
+      "name": "Tool: Verify Main Answer",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        -848,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Validates a student's response to a scaffolding sub-question using semantic understanding. Use this ONLY when you previously asked a scaffolding question and the student is now responding to it. Returns: {correct: bool, partially_correct: bool, reasoning: string}",
+        "jsCode": "// Semantic validation using OpenAI\nconst scaffoldingQuestion = $input.scaffolding_question || '';\nconst studentResponse = $input.student_response || '';\nconst problemContext = $input.problem_context || '';\n\nif (!scaffoldingQuestion || !studentResponse) {\n  return { error: true, correct: false, partially_correct: false };\n}\n\nconst openaiApiKey = $credentials.openAiApi.apiKey;\n\nconst prompt = `You are evaluating a student's response to a scaffolding question in a math tutoring session.\n\nMain Problem: ${problemContext}\nScaffolding Question: ${scaffoldingQuestion}\nStudent Response: ${studentResponse}\n\nDetermine if the student's response is:\n- CORRECT: Demonstrates understanding, answer is accurate\n- PARTIALLY_CORRECT: On the right track but incomplete or slightly inaccurate\n- INCORRECT: Misunderstands the concept or gives wrong answer\n\nReturn ONLY valid JSON:\n{\"status\": \"correct|partially_correct|incorrect\", \"reasoning\": \"brief explanation\"}`;\n\nconst response = await fetch('https://api.openai.com/v1/chat/completions', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${openaiApiKey}`\n  },\n  body: JSON.stringify({\n    model: 'gpt-4o-mini',\n    messages: [{ role: 'user', content: prompt }],\n    temperature: 0.2,\n    max_tokens: 150\n  })\n});\n\nconst data = await response.json();\nconst content = data.choices[0].message.content;\n\ntry {\n  const validation = JSON.parse(content);\n  return {\n    correct: validation.status === 'correct',\n    partially_correct: validation.status === 'partially_correct',\n    incorrect: validation.status === 'incorrect',\n    reasoning: validation.reasoning,\n    error: false\n  };\n} catch (error) {\n  return { error: true, correct: false, partially_correct: false };\n}"
+      },
+      "id": "90f04f83-b18b-46d7-9ef9-65a04afc8f69",
+      "name": "Tool: Validate Scaffolding",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.2,
+      "position": [
+        -704,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build context for AI Agent\nconst inputData = $input.item.json;\nconst sessionData = $('Load Session').item.json;\nconst session = sessionData.session;\n\nconst recentTurns = session.recent_turns || [];\nconst lastTutorMessage = recentTurns.length > 0 ? recentTurns[recentTurns.length - 1]?.tutor_response || '' : '';\nconst lastCategory = recentTurns.length > 0 ? recentTurns[recentTurns.length - 1]?.category : null;\n\n// Check if last turn is from current problem (not previous problem)\nconst lastTurnFromCurrentProblem = recentTurns.length > 0 && \n  !recentTurns[recentTurns.length - 1]?.is_previous_problem;\n\n// Get state from session (preferred) or detect heuristically (fallback)\nconst scaffoldingState = session.current_problem?.scaffolding || { active: false, depth: 0, last_question: null };\nconst teachBackState = session.current_problem?.teach_back || { active: false, awaiting_explanation: false };\n\n// Fallback: Detect if we're in scaffolding mode (if state not set)\nif (!scaffoldingState.active && recentTurns.length > 0) {\n  const hasQuestionMark = lastTutorMessage.includes('?');\n  const isScaffoldingQuestion = lastTurnFromCurrentProblem && hasQuestionMark && (\n    lastTutorMessage.toLowerCase().includes('what does') ||\n    (lastTutorMessage.toLowerCase().includes('what is') && \n      !lastTutorMessage.toLowerCase().includes(session.current_problem.text.toLowerCase())) ||\n    lastTutorMessage.toLowerCase().includes('mean') ||\n    lastTutorMessage.toLowerCase().includes('think about') ||\n    lastTutorMessage.toLowerCase().includes('how') ||\n    lastTutorMessage.toLowerCase().includes('can you tell me') ||\n    lastTutorMessage.toLowerCase().includes('where is') ||\n    lastTutorMessage.toLowerCase().includes('where does') ||\n    lastTutorMessage.toLowerCase().includes('show me') ||\n    lastTutorMessage.toLowerCase().includes('visualize') ||\n    lastTutorMessage.toLowerCase().includes('represent') ||\n    lastTutorMessage.toLowerCase().includes('which direction') ||\n    lastTutorMessage.toLowerCase().includes(\"let's start\")\n  );\n  \n  if (isScaffoldingQuestion) {\n    scaffoldingState.active = true;\n    scaffoldingState.last_question = lastTutorMessage;\n  }\n}\n\n// Fallback: Detect if we're in teach-back mode (if state not set)\nif (!teachBackState.active && lastTurnFromCurrentProblem && lastCategory === 'correct') {\n  const isTeachBackQuestion = (\n    lastTutorMessage.toLowerCase().includes('explain') ||\n    lastTutorMessage.toLowerCase().includes('how did you') ||\n    lastTutorMessage.toLowerCase().includes('walk me through') ||\n    lastTutorMessage.toLowerCase().includes('tell me how')\n  );\n  \n  if (isTeachBackQuestion) {\n    teachBackState.active = true;\n    teachBackState.awaiting_explanation = true;\n  }\n}\n\nreturn [{\n  json: {\n    student_message: inputData.message,\n    current_problem: inputData.current_problem,\n    attempt_count: session.current_problem?.attempt_count || 1,\n    is_scaffolding_active: scaffoldingState.active,\n    scaffolding_depth: scaffoldingState.depth,\n    scaffolding_last_question: scaffoldingState.last_question || lastTutorMessage,\n    is_teach_back_active: teachBackState.active,\n    teach_back_awaiting: teachBackState.awaiting_explanation,\n    last_tutor_question: scaffoldingState.active ? (scaffoldingState.last_question || lastTutorMessage) : null,\n    last_category: lastCategory,\n    session_id: sessionData._session_id,\n    student_id: sessionData.student_id,\n    _session: session,\n    _start_time: sessionData._start_time\n  }\n}];"
+      },
+      "id": "0e5bffe4-b4be-4482-a4e3-aee83889331b",
+      "name": "Prepare Agent Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1488,
+        -544
+      ],
+      "notes": "Detects scaffolding mode and builds context for agent"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.student_message }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a scaffolding validation agent.\n\nCONTEXT:\n- Main Problem: {{ $json.current_problem.text }}\n- Last Scaffolding Question: {{ $json.scaffolding_last_question }}\n- Student's Response: {{ $json.student_message }}\n\nYOUR JOB:\nThe student is responding to a scaffolding sub-question. Use the validate_scaffolding tool to check if their response is correct.\n\nTOOL USAGE:\nCall validate_scaffolding with:\n- scaffolding_question: \"{{ $json.scaffolding_last_question }}\"\n- student_response: \"{{ $json.student_message }}\"\n- problem_context: \"{{ $json.current_problem.text }}\"\n\nThe tool will return: {correct: bool, partially_correct: bool, reasoning: string}\n\nBased on tool result:\n- If correct: Return {\"category\": \"scaffold_progress\", \"is_main_problem_attempt\": false, \"confidence\": 0.9, \"reasoning\": \"tool result reasoning\"}\n- If partially_correct: Return {\"category\": \"stuck\", \"is_main_problem_attempt\": false, \"confidence\": 0.85, \"reasoning\": \"tool result reasoning\"}\n- If incorrect: Return {\"category\": \"stuck\", \"is_main_problem_attempt\": false, \"confidence\": 0.85, \"reasoning\": \"tool result reasoning\"}\n\nIMPORTANT:\n- ALWAYS call the validate_scaffolding tool\n- Return valid JSON only\n- Copy the reasoning from the tool result"
+        }
+      },
+      "id": "09f5d88a-050a-4c95-b455-8c2cd6240f0b",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        -992,
+        -672
+      ],
+      "notes": "Agent with tools for context-aware classification"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse agent response with error handling\nconst agentData = $input.item.json;\n\nlet classification;\ntry {\n  let rawContent;\n\n  if (Array.isArray(agentData)) {\n    rawContent = agentData[0]?.output || agentData[0]?.text || '';\n  } else {\n    rawContent = agentData.output || agentData.text || agentData.message?.content || '';\n  }\n\n  classification = JSON.parse(rawContent);\n\n  if (!classification.category) {\n    throw new Error('Missing category field');\n  }\n\n} catch (error) {\n  classification = {\n    category: 'stuck',\n    confidence: 0.5,\n    is_main_problem_attempt: false,\n    reasoning: `Parsing error: ${error.message}`,\n    tool_used: 'none',\n    error: true\n  };\n}\n\n// Map teach_back_explanation to stuck for routing (scaffold_progress gets its own response)\nlet responseCategory = classification.category;\nif (classification.category === 'teach_back_explanation') {\n  responseCategory = 'stuck';\n}\n\nreturn [{\n  json: {\n    category: responseCategory,\n    confidence: classification.confidence || 0.5,\n    is_main_problem_attempt: classification.is_main_problem_attempt || false,\n    verification: classification.verification_result || null,\n    agent_reasoning: classification.reasoning || '',\n    tool_used: classification.tool_used || 'none',\n    original_category: classification.category\n  }\n}];"
+      },
+      "id": "fd5c0590-48da-49b8-a8e5-c0501d809139",
+      "name": "Parse Agent Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        -608
+      ],
+      "notes": "Parses agent JSON, handles errors, maps categories"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Response Context - Format conversation history for response nodes\nconst classification = $input.item.json;\nconst context = $('Prepare Agent Context').item.json;\nconst session = context._session;\n\n// Format recent turns as chat history string\nlet chatHistory = '';\nif (session.recent_turns && session.recent_turns.length > 0) {\n  chatHistory = session.recent_turns.map((turn, i) => {\n    return `Student: ${turn.student_message}\\nTutor: ${turn.tutor_response}`;\n  }).join('\\n\\n');\n}\n\nreturn [{\n  json: {\n    // Classification data\n    category: classification.category,\n    confidence: classification.confidence,\n    is_main_problem_attempt: classification.is_main_problem_attempt,\n    verification: classification.verification,\n    \n    // Context for response generation\n    current_problem: context.current_problem,\n    message: context.student_message,\n    attempt_count: context.attempt_count,\n    chat_history: chatHistory,\n    is_scaffolding_active: context.is_scaffolding_active,\n    scaffolding_depth: context.scaffolding_depth,\n    is_teach_back_active: context.is_teach_back_active,\n    teach_back_awaiting: context.teach_back_awaiting,\n    \n    // Pass through for later nodes\n    _session: session,\n    _session_id: context.session_id,\n    _start_time: context._start_time,\n    _classification: classification\n  }\n}];"
+      },
+      "id": "87640581-4e0c-4867-ac77-ba864ed2228f",
+      "name": "Build Response Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        -544
+      ],
+      "notes": "Formats conversation history and merges context for response nodes"
+    },
+    {
+      "parameters": {
         "httpMethod": "POST",
         "path": "tutor/message",
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "b569024f-af12-4972-814e-6047449ea5e8",
+      "id": "5e7d7e8d-b7e6-45fc-91a8-519905bd1fac",
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [
-        -3616,
-        208
+        -2160,
+        -416
       ],
       "webhookId": "tutor-message",
       "notes": "Receives: {student_id, session_id, message, current_problem: {id, text, correct_answer}}"
     },
     {
       "parameters": {
-        "jsCode": "// Load or initialize session from workflow static data\nconst sessionId = $input.item.json.session_id;\nconst studentId = $input.item.json.student_id;\nconst currentProblem = $input.item.json.current_problem;\n\n// Get existing sessions from workflow static data\nconst sessions = $getWorkflowStaticData('global')?.sessions || {};\n\nlet session = sessions[sessionId];\n\n// Check if session exists and hasn't expired (30-minute TTL)\nif (session) {\n  const lastActive = new Date(session.last_active);\n  const now = new Date();\n  const minutesInactive = (now - lastActive) / 1000 / 60;\n\n  if (minutesInactive > 30) {\n    // Session expired - treat as new session\n    session = null;\n  }\n}\n\nif (!session) {\n  // Create new session\n  session = {\n    session_id: sessionId,\n    student_id: studentId,\n    created_at: new Date().toISOString(),\n    last_active: new Date().toISOString(),\n    current_problem: {\n      id: currentProblem.id,\n      text: currentProblem.text,\n      correct_answer: currentProblem.correct_answer,\n      attempt_count: 0\n    },\n    recent_turns: [],\n    stats: {\n      total_turns: 0,\n      problems_attempted: 1,\n      problems_solved: 0\n    }\n  };\n}\n\n// Check if problem changed\nif (session.current_problem.id !== currentProblem.id) {\n  session.current_problem = {\n    id: currentProblem.id,\n    text: currentProblem.text,\n    correct_answer: currentProblem.correct_answer,\n    attempt_count: 0\n  };\n  session.stats.problems_attempted++;\n}\n\n// Add start time for latency tracking\nconst startTime = Date.now();\n\nreturn {\n  json: {\n    ...$input.item.json,\n    session: session,\n    _session_id: sessionId,\n    _start_time: startTime\n  }\n};"
+        "jsCode": "// Normalize Input - Transform chat and webhook payloads to consistent format\n  const inputData = $input.item.json;\n\n  // Detect source type\n  let source = 'unknown';\n  let normalizedData = {};\n\n  // Check if this is from Chat Trigger\n  if (inputData.chatId || inputData.chat || inputData.sessionId) {\n    source = 'chat';\n\n    // Map chat fields to expected format\n    normalizedData = {\n      session_id: inputData.chatId || inputData.sessionId || inputData.chat?.id || `chat_${Date.now()}`,\n      student_id: inputData.userId || inputData.user?.id || inputData.from || 'unknown_user',\n      message: inputData.chatInput || inputData.message || inputData.text || inputData.chatMessage || '',\n\n      // Default problem if none provided\n      current_problem: inputData.current_problem || {\n        id: 'default_problem_1',\n        text: 'What is -3 + 5?',\n        correct_answer: '2'\n      },\n\n      // Metadata\n      _source: 'chat',\n      _original_payload: inputData\n    };\n  }\n  // Check if this is from Webhook Trigger\n  else if (inputData.session_id || inputData.student_id || inputData.current_problem) {\n    source = 'webhook';\n\n    // Webhook already in correct format, just pass through\n    normalizedData = {\n      session_id: inputData.session_id,\n      student_id: inputData.student_id,\n      message: inputData.message,\n      current_problem: inputData.current_problem,\n\n      // Metadata\n      _source: 'webhook',\n      _original_payload: inputData\n    };\n  }\n  // Unknown source - try best guess\n  else {\n    source = 'unknown';\n\n    normalizedData = {\n      session_id: inputData.id || `session_${Date.now()}`,\n      student_id: inputData.user || 'unknown',\n      message: inputData.chatInput || inputData.message || inputData.text || '',\n      current_problem: {\n        id: 'default_problem_1',\n        text: 'What is -3 + 5?',\n        correct_answer: '2'\n      },\n\n      // Metadata\n      _source: 'unknown',\n      _original_payload: inputData,\n      _warning: 'Could not detect source type, using defaults'\n    };\n  }\n\n  return {\n    json: normalizedData\n  };"
       },
-      "id": "57f5881d-3d27-42f2-b845-547a1adf8d8f",
-      "name": "Load Session",
+      "id": "10875d08-1193-4c53-aacc-e42ff5fb3ae4",
+      "name": "Normalize input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -3248,
-        -64
+        -1888,
+        -544
       ],
       "notes": "Loads session from workflow static data, adds start_time for latency tracking"
     },
     {
       "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "=Is this student input an answer attempt to the problem, or something else?\n\n  Problem: {{$json.current_problem.text}}\n  Student input: \"{{$json._original_payload.chatInput}}\"\n\n  Respond with JSON only:\n  {\n    \"is_answer\": true/false,\n    \"confidence\": 0.0-1.0\n  }\n\n  Examples:\n  \"2\" → {\"is_answer\": true, \"confidence\": 0.99}\n  \"I don't know\" → {\"is_answer\": false, \"confidence\": 0.95}\n  \"What is a negative number?\" → {\"is_answer\": false, \"confidence\": 0.98}"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 50,
-          "temperature": 0.1
-        }
+        "jsCode": "// Load or initialize session from workflow static data\nconst sessionId = $input.item.json.session_id;\nconst studentId = $input.item.json.student_id;\nconst currentProblem = $input.item.json.current_problem;\n\n// Get existing sessions from workflow static data\nconst sessions = $getWorkflowStaticData('global')?.sessions || {};\n\nlet session = sessions[sessionId];\n\n// Check if session exists and hasn't expired (30-minute TTL)\nif (session) {\n  const lastActive = new Date(session.last_active);\n  const now = new Date();\n  const minutesInactive = (now - lastActive) / 1000 / 60;\n\n  if (minutesInactive > 30) {\n    // Session expired - treat as new session\n    session = null;\n  }\n}\n\nif (!session) {\n  // Create new session\n  session = {\n    session_id: sessionId,\n    student_id: studentId,\n    created_at: new Date().toISOString(),\n    last_active: new Date().toISOString(),\n    current_problem: {\n      id: currentProblem.id,\n      text: currentProblem.text,\n      correct_answer: currentProblem.correct_answer,\n      attempt_count: 0,\n      scaffolding: {\n        active: false,\n        depth: 0,\n        last_question: null\n      },\n      teach_back: {\n        active: false,\n        awaiting_explanation: false\n      }\n    },\n    recent_turns: [],\n    stats: {\n      total_turns: 0,\n      problems_attempted: 1,\n      problems_solved: 0\n    }\n  };\n}\n\n// Check if problem changed (Hybrid Memory: keep only last 3 turns for continuity)\nif (session.current_problem.id !== currentProblem.id) {\n  // Keep last 3 turns from previous problem for continuity\n  if (session.recent_turns && session.recent_turns.length > 0) {\n    session.recent_turns = session.recent_turns.slice(-3);\n    // Mark these as previous problem context\n    session.recent_turns.forEach(turn => {\n      turn.is_previous_problem = true;\n    });\n  }\n  \n  // Reset problem data\n  session.current_problem = {\n    id: currentProblem.id,\n    text: currentProblem.text,\n    correct_answer: currentProblem.correct_answer,\n    attempt_count: 0,\n    scaffolding: {\n      active: false,\n      depth: 0,\n      last_question: null\n    },\n    teach_back: {\n      active: false,\n      awaiting_explanation: false\n    }\n  };\n  session.stats.problems_attempted++;\n}\n\n// Add start time for latency tracking\nconst startTime = Date.now();\n\nreturn {\n  json: {\n    ...$input.item.json,\n    session: session,\n    _session_id: sessionId,\n    _start_time: startTime\n  }\n};"
       },
-      "id": "323ff0e9-73f6-4d6a-9855-a8900522c334",
-      "name": "Stage 1: Is Answer?",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        -3136,
-        -256
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "LLM classifies: is student giving an answer or asking/helping/off-topic?"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Hybrid Triage: Rule-based + LLM fallback\n  const input = $input.item.json;\n  const llmOutput = Array.isArray(input) ? input[0] : input;\n  const llmResponse = llmOutput.message?.content || llmOutput.text || '{}';\n\n  // Get original message from Load Session\n  const loadSessionData = $('Load Session').item.json;\n  const originalMessage = loadSessionData.message.trim();\n\n  let triageResult;\n\n  // Rule 1: If it's numeric or a simple mathematical expression, it's an answer\n  const isNumeric = /^-?\\d+\\.?\\d*$/.test(originalMessage);\n  const isMathExpression = /^-?\\d+[\\d\\s+\\-*/().]+\\d+$/.test(originalMessage);\n  const isWrittenNumber =\n  /^(negative|minus)?\\s*(zero|one|two|three|four|five|six|seven|eight|nine|ten)$/i.test(originalMessage);\n\n  if (isNumeric || isMathExpression || isWrittenNumber) {\n    // Definitely an answer\n    triageResult = {\n      is_answer: true,\n      confidence: 0.99,\n      method: 'rule-based'\n    };\n  }\n  // Rule 2: If it contains common non-answer phrases, it's NOT an answer\n  else if (/^(what|why|how|help|stuck|don't know|idk)/i.test(originalMessage)) {\n    triageResult = {\n      is_answer: false,\n      confidence: 0.95,\n      method: 'rule-based'\n    };\n  }\n  // Otherwise, use LLM classification\n  else {\n    try {\n      triageResult = JSON.parse(llmResponse);\n      triageResult.method = 'llm';\n    } catch (e) {\n      // LLM failed, default to treating as answer if short\n      triageResult = {\n        is_answer: originalMessage.length < 20,\n        confidence: 0.5,\n        method: 'fallback'\n      };\n    }\n  }\n\n  return {\n    json: {\n      ...loadSessionData,\n      triage_stage1: triageResult,\n      is_answer: triageResult.is_answer\n    }\n  };"
-      },
-      "id": "ae74cfdd-c7c7-4ec4-bf09-55a4604d36a3",
-      "name": "Parse Triage Result",
+      "id": "264469af-1d8c-41e3-a7a0-7e268f6461c2",
+      "name": "Load Session",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2848,
-        -64
+        -1728,
+        -544
       ],
-      "notes": "Extracts is_answer from LLM JSON, with fallback to regex if parsing fails"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "boolean": [
-            {
-              "value1": "={{$json.is_answer}}",
-              "value2": true
-            }
-          ]
-        }
-      },
-      "id": "c8db402f-9059-42ab-bb9b-21d8f218855d",
-      "name": "If Answer",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        -2640,
-        -64
-      ],
-      "notes": "Branch: TRUE → verify answer, FALSE → classify non-answer intent"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Verify answer with sanitized eval (no math.js in n8n)\nconst studentInput = $input.item.json.message;\nconst correctAnswer = $input.item.json.current_problem.correct_answer;\n\nfunction verifyAnswer(studentInput, correctAnswer) {\n  try {\n    // Clean input\n    let cleaned = studentInput.trim().toLowerCase();\n\n    // Handle written numbers\n    const numberWords = {\n      'zero': '0', 'one': '1', 'two': '2', 'three': '3',\n      'four': '4', 'five': '5', 'six': '6', 'seven': '7',\n      'eight': '8', 'nine': '9', 'ten': '10',\n      'negative': '-', 'minus': '-'\n    };\n\n    for (let [word, digit] of Object.entries(numberWords)) {\n      const regex = new RegExp('\\\\b' + word + '\\\\b', 'g');\n      cleaned = cleaned.replace(regex, digit);\n    }\n\n    // Remove extra spaces\n    cleaned = cleaned.replace(/\\s+/g, '');\n\n    // Sanitize before eval (security)\n    const sanitized = cleaned.replace(/[^0-9+\\-*/().]/g, '');\n    if (sanitized !== cleaned && cleaned !== '') {\n      throw new Error('Invalid characters in input');\n    }\n\n    // Evaluate both\n    const studentVal = parseFloat(eval(sanitized || '0'));\n    const correctVal = parseFloat(eval(correctAnswer));\n\n    // Calculate difference\n    const diff = Math.abs(studentVal - correctVal);\n    const tolerance = 0.001;\n\n    // Improved close threshold: 20% with min 0.3 and max 2.0\n    // This handles both small numbers (0.2) and large numbers (20) appropriately\n    const percentThreshold = Math.abs(correctVal * 0.2);\n    const closeThreshold = Math.min(Math.max(percentThreshold, 0.3), 2.0);\n\n    return {\n      correct: diff < tolerance,\n      close: diff >= tolerance && diff < closeThreshold,\n      student_value: studentVal,\n      correct_value: correctVal,\n      difference: diff\n    };\n  } catch (error) {\n    return {\n      correct: false,\n      close: false,\n      error: \"Could not parse as number or expression\",\n      error_message: error.message,\n      raw_input: studentInput\n    };\n  }\n}\n\nconst verification = verifyAnswer(studentInput, correctAnswer);\n\nreturn {\n  json: {\n    ...$input.item.json,\n    verification: verification\n  }\n};"
-      },
-      "id": "4b42011a-9799-424d-83a5-ea3843265781",
-      "name": "Verify Answer",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -2448,
-        -160
-      ],
-      "notes": "Sanitized eval (security), handles decimals/fractions/written numbers, 20% threshold"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Stage 2a: Classify answer quality based on verification (rule-based)\nconst verification = $input.item.json.verification;\n\nlet category, confidence;\n\n// Handle verification errors (e.g., unparseable input)\nif (verification.error) {\n  // Treat as 'stuck' - student might not understand what format to use\n  category = 'stuck';\n  confidence = 0.8;\n} else if (verification.correct) {\n  category = 'correct';\n  confidence = 0.99;\n} else if (verification.close) {\n  category = 'close';\n  confidence = 0.95;\n} else {\n  category = 'wrong_operation';\n  confidence = 0.85;\n}\n\nreturn {\n  json: {\n    ...$input.item.json,\n    category: category,\n    confidence: confidence,\n    stage: 'stage2a',\n    verification_failed: verification.error ? true : false\n  }\n};"
-      },
-      "id": "a72cea9f-31ae-461d-ace6-8f2ba1e6cb20",
-      "name": "Stage 2a: Answer Quality",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -2240,
-        -160
-      ],
-      "notes": "Rule-based: correct → correct, close → close, else → wrong_operation"
-    },
-    {
-      "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "=The student is NOT giving an answer. What are they doing?\n\n  Problem: {{$json.current_problem.text}}\n  Student input: \"{{$json.message}}\"\n\n  Classify as ONE:\n  - conceptual_question: Asking what a concept means (\"What's a negative number?\")\n  - stuck: Asking for help or saying they don't know (\"I don't know\", \"help\", \"I'm stuck\")\n  - off_topic: Unrelated to the problem (\"What's for lunch?\", random chat)\n\n  Respond with JSON only:\n  {\n    \"category\": \"one of above\",\n    \"confidence\": 0.0-1.0\n  }\n\n  Examples:\n  \"What is a negative number?\" → {\"category\": \"conceptual_question\", \"confidence\": 0.98}\n  \"I don't know\" → {\"category\": \"stuck\", \"confidence\": 0.95}\n  \"What's for lunch?\" → {\"category\": \"off_topic\", \"confidence\": 0.99}"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 100,
-          "temperature": 0.1
-        }
-      },
-      "id": "c8fb25f8-fe00-49e5-a12e-b98fa0ac63eb",
-      "name": "Stage 2b: Non-Answer Intent",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        -2528,
-        224
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "LLM classifies non-answers: conceptual_question, stuck, or off_topic"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Parse Stage 2b result\nconst llmResponse = $input.item.json.message?.content || $input.item.json.text || '{}';\n\n// Get data from Parse Triage Result (passed through Stage 2b)\nconst triageData = $('Parse Triage Result').item.json;\nconst originalMessage = triageData.message;\n\nlet triageResult;\n\ntry {\n  triageResult = JSON.parse(llmResponse);\n} catch (e) {\n  // Fallback classification based on keywords\n  const messageLower = originalMessage.toLowerCase();\n  if (messageLower.includes('what') || messageLower.includes('?')) {\n    triageResult = { category: 'conceptual_question', confidence: 0.7, fallback: true };\n  } else if (messageLower.includes('don\\'t know') || messageLower.includes('help') || messageLower.includes('stuck')) {\n    triageResult = { category: 'stuck', confidence: 0.8, fallback: true };\n  } else {\n    triageResult = { category: 'off_topic', confidence: 0.6, fallback: true };\n  }\n}\n\nreturn {\n  json: {\n    ...triageData,\n    category: triageResult.category,\n    confidence: triageResult.confidence,\n    stage: 'stage2b'\n  }\n};"
-      },
-      "id": "e35eb5c7-1e3b-4fcc-b041-3677241230f7",
-      "name": "Parse Stage 2b",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -2240,
-        48
-      ],
-      "notes": "Extracts category from LLM JSON, with keyword fallback"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Enrich context with attempt count, escalation level, and formatted chat history\nconst session = $input.item.json.session;\nconst category = $input.item.json.category;\nconst isAnswer = $input.item.json.is_answer;\n\n// Get current attempt count (will increment later if answer)\nconst attemptCount = session.current_problem.attempt_count + (isAnswer ? 1 : 0);\n\n// Determine escalation level\nlet escalationLevel;\nif (attemptCount <= 1) {\n  escalationLevel = 'probe';\n} else if (attemptCount === 2) {\n  escalationLevel = 'hint';\n} else {\n  escalationLevel = 'teach';\n}\n\n// Format chat history for LLM context\nconst chatHistory = session.recent_turns.map((turn, i) => {\n  return `Turn ${i + 1}:\\nStudent: \"${turn.student_input}\"\\nTutor: \"${turn.tutor_response}\"`;\n}).join('\\n\\n');\n\nreturn {\n  json: {\n    ...$input.item.json,\n    attempt_count: attemptCount,\n    escalation_level: escalationLevel,\n    chat_history: chatHistory\n  }\n};"
-      },
-      "id": "f0738050-9ea4-4c4c-b02d-958e6920c9a7",
-      "name": "Enrich Context",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -2048,
-        -64
-      ],
-      "notes": "Adds attempt_count, escalation_level (probe/hint/teach), formatted chat_history"
+      "notes": "Loads session from workflow static data, adds start_time for latency tracking"
     },
     {
       "parameters": {
@@ -343,6 +457,30 @@
               },
               "renameOutput": true,
               "outputKey": "off_topic"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.category}}",
+                    "rightValue": "scaffold_progress",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "5d7e8f9a-0b1c-2d3e-4f5a-6b7c8d9e0f1a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "scaffold_progress"
             }
           ]
         },
@@ -350,13 +488,13 @@
           "fallbackOutput": "extra"
         }
       },
-      "id": "ff0965d6-c491-4642-8f7a-3f224f8abe82",
+      "id": "e3f7cce1-7ecc-44d9-a7d5-638f82be2863",
       "name": "Route by Category",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        -1840,
-        -64
+        -320,
+        -544
       ],
       "notes": "6-way router: sends to appropriate response generator"
     },
@@ -371,7 +509,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are an encouraging math tutor. The student just gave the CORRECT answer.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} ✓ CORRECT\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Get them to explain their reasoning (teach-back method).\n\n{{$json.attempt_count === 1 ? 'They got it right on the first try! Ask them to walk you through their thinking.' : 'They worked through it and got there! Ask them to explain how they figured it out.'}}\n\nRules:\n- Celebrate their success briefly (1-2 words: \"Perfect!\", \"Excellent!\")\n- Ask them to explain their reasoning in their own words\n- 1-2 sentences total\n- Encouraging, warm tone\n\nYour response:"
+              "content": "=You are an encouraging math tutor. The student just gave the CORRECT answer.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} ✓ CORRECT\n{% if $json.is_scaffolding_active %}Student solved this after working through scaffolding questions.{% endif %}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Get them to explain their reasoning (teach-back method - INITIATE teach-back mode).\n\n{% if $json.is_scaffolding_active %}\n{# They solved it after scaffolding - acknowledge the scaffolding helped #}\n- Celebrate that they figured it out with the scaffolding steps\n- Ask them to explain how they put the pieces together to get {{$json.message}}\n- Reference the scaffolding steps they worked through (check chat history)\n{% elif $json.attempt_count === 1 %}\n{# They got it right on the first try #}\n- They got it right on the first try! Ask them to walk you through their thinking.\n{% else %}\n{# They worked through it #}\n- They worked through it and got there! Ask them to explain how they figured it out.\n{% endif %}\n\nCRITICAL GROUNDING RULES:\n- Reference the ACTUAL problem in your teach-back question: {{$json.current_problem.text}}\n- Ask them to explain how they solved THIS specific problem\n- Don't ask generic questions - tie it to the problem they just solved\n{% if $json.is_scaffolding_active %}\n- Acknowledge the scaffolding journey they went through\n{% endif %}\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Celebrate their success briefly (1-2 words: \"Perfect!\", \"Excellent!\", \"You got it!\")\n- Ask them to explain their reasoning about THIS problem\n- 1-2 sentences total\n- Encouraging, warm tone\n\nYour response:"
             }
           ]
         },
@@ -380,13 +518,13 @@
           "temperature": 0.7
         }
       },
-      "id": "b20d918f-bd7e-4989-95ec-e7c60f841423",
+      "id": "18f0a36b-e9da-484a-ae6b-4c75e8162341",
       "name": "Response: Correct",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.4,
       "position": [
-        -1648,
-        -368
+        -128,
+        -848
       ],
       "credentials": {
         "openAiApi": {
@@ -407,7 +545,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are a patient math tutor using Socratic questioning.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} (incorrect but close to {{$json.current_problem.correct_answer}})\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n{{$json.attempt_count === 1 ? 'Give a gentle probing question to help them spot their small error.' : $json.attempt_count === 2 ? 'Give a more explicit hint about where the error is.' : \"They've tried 3+ times. Walk through one step explicitly, then let them finish.\"}}\n\nRules:\n- 1-2 sentences maximum\n- Ask, don't tell (unless attempt 3+)\n- Use concrete examples (number line, objects, drawings)\n- Encouraging, patient tone\n- DO NOT give the final answer\n\nYour response:"
+              "content": "=You are a patient math tutor using Socratic questioning.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} (incorrect but close to {{$json.current_problem.correct_answer}})\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n{{$json.attempt_count === 1 ? 'Give a gentle probing question to help them spot their small error.' : $json.attempt_count === 2 ? 'Give a more explicit hint about where the error is.' : \"They've tried 3+ times. Walk through one step explicitly, then let them finish.\"}}\n\nCRITICAL GROUNDING RULES:\n- Use ONLY the numbers from the original problem: {{$json.current_problem.text}}\n- Point to what's close about THEIR answer ({{$json.message}})\n- DO NOT make up different examples - work with THIS problem\n- If using a number line or visual, use the actual problem's numbers\n- Check conversation history to avoid repeating hints\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- 1-2 sentences maximum\n- Ask, don't tell (unless attempt 3+)\n- Encouraging, patient tone\n- DO NOT give the final answer\n\nYour response:"
             }
           ]
         },
@@ -416,13 +554,13 @@
           "temperature": 0.7
         }
       },
-      "id": "563c6ddf-be37-4572-9823-03e36fb7efc6",
+      "id": "736bcf3a-cebe-4ce2-8cc7-4b7eaf88eb5c",
       "name": "Response: Close",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.4,
       "position": [
-        -1648,
-        -240
+        -128,
+        -720
       ],
       "credentials": {
         "openAiApi": {
@@ -443,7 +581,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are a patient math tutor. The student's answer suggests they misunderstood the operation or concept.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} (should be {{$json.current_problem.correct_answer}})\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n{{$json.attempt_count === 1 ? 'Ask a clarifying question about the operation or concept.' : $json.attempt_count === 2 ? 'Give a more direct hint about the operation or concept.' : \"They've tried 3+ times. Teach the concept directly with an example, then ask them to try.\"}}\n\nRules:\n- Focus on the specific misconception\n- Use concrete examples (number line, real-world objects)\n- 2-3 sentences for teaching (attempt 3+), 1 sentence for questions (attempts 1-2)\n- Patient, non-judgmental tone\n\nYour response:"
+              "content": "=You are a patient math tutor. The student's answer suggests they misunderstood the operation or concept.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} (should be {{$json.current_problem.correct_answer}})\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n{{$json.attempt_count === 1 ? 'Ask a clarifying question about the operation or concept.' : $json.attempt_count === 2 ? 'Give a more direct hint about the operation or concept.' : \"They've tried 3+ times. Teach the concept directly with an example, then ask them to try.\"}}\n\nCRITICAL GROUNDING RULES:\n- You MUST use the EXACT numbers from the problem: {{$json.current_problem.text}}\n- DO NOT make up easier examples with different numbers (like \"5-2\" or \"8 candies\")\n- Explain THIS specific operation with THESE specific numbers only\n- If using a number line, use the actual problem's numbers\n- Real-world examples must use the same numbers (e.g., \"-3 degrees, then 5 degrees warmer\")\n- Check the conversation history - don't repeat what was already tried\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Focus on the specific misconception in their answer\n- 2-3 sentences for teaching (attempt 3+), 1 sentence for questions (attempts 1-2)\n- Patient, non-judgmental tone\n- Stay with the ORIGINAL problem\n\nYour response:"
             }
           ]
         },
@@ -452,13 +590,13 @@
           "temperature": 0.7
         }
       },
-      "id": "8dc0ee60-bd2b-4c74-a763-284a55a9f3cc",
+      "id": "199b17c4-585c-4530-9966-2db55187acd7",
       "name": "Response: Wrong Operation",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.4,
       "position": [
-        -1648,
-        -128
+        -128,
+        -608
       ],
       "credentials": {
         "openAiApi": {
@@ -479,7 +617,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are a patient math tutor. The student is asking a conceptual question.\n\nProblem: {{$json.current_problem.text}}\nStudent's question: \"{{$json.message}}\"\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Teach the concept using simple, concrete examples.\n\nTeaching strategy:\n1. Give a brief, simple definition (1 sentence)\n2. Provide a concrete example (number line, real-world scenario)\n3. Ask a check question to see if they understood\n\nRules:\n- Use age-appropriate language\n- Concrete examples (number line for negatives, pizza slices for fractions, etc.)\n- 2-3 sentences total\n- End with a simple check question related to the original problem\n- Encouraging tone\n\nYour response:"
+              "content": "=You are a patient math tutor. The student is asking a conceptual question.\n\nProblem: {{$json.current_problem.text}}\nStudent's question: \"{{$json.message}}\"\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Teach the concept using simple, concrete examples.\n\nTeaching strategy:\n1. Give a brief, simple definition (1 sentence)\n2. Provide a concrete example using the ACTUAL problem's numbers\n3. Ask a check question to see if they understood\n\nCRITICAL GROUNDING RULES:\n- After explaining the concept, connect it back to: {{$json.current_problem.text}}\n- Use the actual problem numbers in your example whenever possible\n- Your check question must reference the original problem\n- DO NOT use completely different examples - relate to THIS problem\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Use age-appropriate language\n- 2-3 sentences total\n- End with a check question about the ORIGINAL problem\n- Encouraging tone\n\nYour response:"
             }
           ]
         },
@@ -488,13 +626,13 @@
           "temperature": 0.7
         }
       },
-      "id": "3f3ff116-c510-4cb7-a8af-b7042006dc17",
+      "id": "5bb9953d-93d1-4c3c-aeb9-69320477232d",
       "name": "Response: Conceptual",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.4,
       "position": [
-        -1632,
-        192
+        -112,
+        -288
       ],
       "credentials": {
         "openAiApi": {
@@ -515,7 +653,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are a patient math tutor. The student is stuck or asking for help.\n\nProblem: {{$json.current_problem.text}}\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Break the problem into smaller, manageable steps.\n\n{{$json.attempt_count === 1 ? 'Start with the very first step and ask them to do just that one step.' : $json.attempt_count === 2 ? 'Give them the first step, then ask them to do the second step.' : \"They've tried multiple times. Walk through most of the problem step-by-step, leaving only the final step for them.\"}}\n\nRules:\n- Break into the smallest possible next step\n- 1-2 sentences\n- Encouraging tone (\"Let's...\", \"We can...\")\n- Ask a specific, focused question\n\nYour response:"
+              "content": "=You are a patient math tutor.\n\n{% if $json.is_teach_back_active %}\n{# Student is explaining their reasoning after getting the answer correct #}\nProblem: {{$json.current_problem.text}} (they answered correctly)\nStudent's explanation: \"{{$json.message}}\"\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Acknowledge their explanation warmly and wrap up this problem positively.\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Acknowledge their explanation (\"I love how you explained that!\", \"Great reasoning!\")\n- Briefly reinforce the key concept if their explanation was solid\n- 1-2 sentences total\n- Celebratory, warm tone\n- Signal completion (\"You've got this!\", \"Ready for the next challenge?\")\n\n{% elif $json.is_scaffolding_active %}\n{# Student answered a scaffolding question incorrectly or is still stuck in scaffolding #}\nProblem: {{$json.current_problem.text}}\nStudent's response to scaffolding: \"{{$json.message}}\"\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: The student didn't get the scaffolding question right. Either:\n1. Re-phrase the same scaffolding question more simply, OR\n2. Break it into an even smaller sub-question\n\nCRITICAL GROUNDING RULES:\n- Stay focused on the MAIN problem: {{$json.current_problem.text}}\n- Use the EXACT numbers from the main problem\n- Check conversation history to see what was already asked\n- Make the scaffolding step smaller and more concrete\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Acknowledge their effort (\"Good try!\")\n- Give a simpler, more concrete sub-question\n- 1-2 sentences\n- Patient, encouraging tone\n\n{% else %}\n{# Student is stuck or asking for help - initiate scaffolding #}\nProblem: {{$json.current_problem.text}}\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Break the problem into smaller, manageable steps.\n\n{{$json.attempt_count === 1 ? 'Start with the very first step and ask them to do just that one step.' : $json.attempt_count === 2 ? 'Give them the first step, then ask them to do the second step.' : \"They've tried multiple times. Walk through most of the problem step-by-step, leaving only the final step for them.\"}}\n\nCRITICAL GROUNDING RULES:\n- Break down THIS problem: {{$json.current_problem.text}}\n- Use the EXACT numbers from this problem\n- DO NOT create a simpler problem with different numbers\n- Each scaffolding step must use the actual problem's numbers\n- Check conversation history to see what steps were already tried\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Break into the smallest possible next step\n- 1-2 sentences\n- Encouraging tone (\"Let's...\", \"We can...\")\n- Ask a specific, focused question about THIS problem\n{% endif %}\n\nYour response:"
             }
           ]
         },
@@ -524,13 +662,13 @@
           "temperature": 0.7
         }
       },
-      "id": "b6abacb6-833d-4168-9809-1745aef63c33",
+      "id": "23bebbe3-dc0c-4949-80c7-7f7f2e8097c5",
       "name": "Response: Stuck",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.4,
       "position": [
-        -1632,
-        352
+        -112,
+        -128
       ],
       "credentials": {
         "openAiApi": {
@@ -551,7 +689,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are a friendly but focused math tutor. The student went off-topic.\n\nProblem: {{$json.current_problem.text}}\nStudent said: \"{{$json.message}}\" (unrelated to the problem)\n\nYour goal: Politely redirect them back to the math problem.\n\nRules:\n- Acknowledge their input very briefly (1-2 words if appropriate)\n- Gently redirect to the problem\n- 1 sentence total\n- Warm, friendly tone (not scolding)\n- Re-state the problem or ask them to focus\n\nExamples:\n- \"Ha! Let's save that for later. Right now, what do you think the answer is?\"\n- \"I hear you! But first, can you help me with this problem?\"\n- \"Let's focus on the math for now. What's your answer?\"\n\nYour response:"
+              "content": "=You are a friendly but focused math tutor. The student went off-topic.\n\nProblem: {{$json.current_problem.text}}\nStudent said: \"{{$json.message}}\" (unrelated to the problem)\n\nYour goal: Politely redirect them back to the math problem.\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Acknowledge their input very briefly (1-2 words if appropriate)\n- Gently redirect to the problem\n- 1 sentence total\n- Warm, friendly tone (not scolding)\n- Re-state the problem or ask them to focus\n\nExamples:\n- \"Ha! Let's save that for later. Right now, what do you think the answer is?\"\n- \"I hear you! But first, can you help me with this problem?\"\n- \"Let's focus on the math for now. What's your answer?\"\n\nYour response:"
             }
           ]
         },
@@ -560,13 +698,13 @@
           "temperature": 0.7
         }
       },
-      "id": "319cdb26-95f6-46e4-9a0f-e55d139cbb1b",
+      "id": "35e2ac3b-f00b-4b33-b9a9-6e48e022b948",
       "name": "Response: Off-Topic",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.4,
       "position": [
-        -1632,
-        496
+        -112,
+        16
       ],
       "credentials": {
         "openAiApi": {
@@ -578,15 +716,51 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract response from whichever LLM node executed\n  const llmOutput = $input.item.json;\n  const response = llmOutput.message?.content || llmOutput.text || \"I'm here to help you learn!\";\n\n  // Get data from Enrich Context node\n  const enrichContext = $('Enrich Context').item.json;\n  const startTime = enrichContext._start_time;\n  const latency = Date.now() - startTime;\n\n  // Build turn object\n  const turn = {\n    student_input: enrichContext.message,\n    is_answer: enrichContext.is_answer,\n    category: enrichContext.category,\n    verification: enrichContext.verification || null,\n    tutor_response: response,\n    latency_ms: latency,\n    timestamp: new Date().toISOString()\n  };\n\n  // Update session\n  const session = enrichContext.session;\n\n  // Increment attempt count if was an answer (for next turn)\n  if (enrichContext.is_answer) {\n    session.current_problem.attempt_count++;\n  }\n\n  // Mark problem solved if correct\n  if (enrichContext.category === 'correct') {\n    session.stats.problems_solved++;\n  }\n\n  // Add turn to recent history\n  session.recent_turns.push(turn);\n\n  // Trim to last 5 turns\n  if (session.recent_turns.length > 5) {\n    session.recent_turns = session.recent_turns.slice(-5);\n  }\n\n  // Update metadata\n  session.last_active = new Date().toISOString();\n  session.stats.total_turns++;\n\n  // Save session to workflow static data\n  const staticData = $getWorkflowStaticData('global');\n  if (!staticData.sessions) {\n    staticData.sessions = {};\n  }\n  staticData.sessions[enrichContext._session_id] = session;\n\n  // Return final response\n  return {\n    json: {\n      output: response  // Chat trigger looks for 'output' field\n    }\n  };"
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an encouraging math tutor. The student just answered a scaffolding question correctly!\n\nMain Problem: {{$json.current_problem.text}}\nStudent's response to scaffolding question: \"{{$json.message}}\" ✓\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Acknowledge their correct answer and either (1) ask the next scaffolding step, or (2) guide them back to solving the main problem.\n\nSTRATEGY:\n- If this was an early scaffolding step: Acknowledge briefly (\"Great!\", \"Exactly!\") then ask the NEXT step that builds toward the main problem\n- If this was the final scaffolding step: Acknowledge and ask them to now solve the MAIN problem using what they learned\n\nCRITICAL GROUNDING RULES:\n- Stay focused on the MAIN problem: {{$json.current_problem.text}}\n- Use the EXACT numbers from the main problem in your next scaffolding question\n- DO NOT repeat the same scaffolding question - progress to the next step\n- Check conversation history to see what was already asked\n- Each new scaffolding question should be one small step closer to the final answer\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Briefly acknowledge their correct answer (1-2 words: \"Great!\", \"Exactly!\", \"Perfect!\")\n- Then immediately ask the next step OR guide back to main problem\n- 1-2 sentences total\n- Encouraging, forward-moving tone\n- DO NOT give the final answer to the main problem\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 200,
+          "temperature": 0.7
+        }
       },
-      "id": "30763756-720e-4112-88fc-36aabea1a9b3",
+      "id": "c207286c-8a6d-4f25-9a8d-c76abff9d594",
+      "name": "Response: Scaffold Progress",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -112,
+        144
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "SCAFFOLD PROGRESS: Acknowledge correct scaffolding answer, ask next step"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update session with conversation tracking and state management\nconst contextData = $('Build Response Context').item.json;\nconst responseData = $input.item.json;\nconst response = responseData.message?.content || responseData.text || \"I'm here to help you learn!\";\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.sessions) {\n  staticData.sessions = {};\n}\n\nconst session = contextData._session;\nconst classification = contextData._classification;\nconst category = classification.original_category || classification.category;\n\n// Only increment attempt_count for main problem attempts\nif (classification.is_main_problem_attempt) {\n  session.current_problem.attempt_count++;\n}\n\n// STATE TRANSITIONS\n\n// 1. SCAFFOLDING STATE MANAGEMENT\nif (category === 'stuck' && !contextData.is_scaffolding_active && !contextData.is_teach_back_active) {\n  // ENTER scaffolding mode\n  session.current_problem.scaffolding = {\n    active: true,\n    depth: 1,\n    last_question: response\n  };\n} else if (category === 'scaffold_progress') {\n  // PROGRESS through scaffolding (student answered scaffolding question correctly)\n  if (session.current_problem.scaffolding) {\n    session.current_problem.scaffolding.depth++;\n    session.current_problem.scaffolding.last_question = response;\n  }\n} else if (category === 'correct' && contextData.is_scaffolding_active) {\n  // EXIT scaffolding (student solved main problem)\n  session.current_problem.scaffolding = {\n    active: false,\n    depth: 0,\n    last_question: null\n  };\n}\n\n// 2. TEACH-BACK STATE MANAGEMENT\nif (category === 'correct' && !contextData.is_teach_back_active) {\n  // ENTER teach-back mode (student got correct answer, now ask for explanation)\n  session.current_problem.teach_back = {\n    active: true,\n    awaiting_explanation: true\n  };\n} else if (category === 'teach_back_explanation' || (contextData.is_teach_back_active && contextData.teach_back_awaiting)) {\n  // EXIT teach-back mode (student provided explanation)\n  session.current_problem.teach_back = {\n    active: false,\n    awaiting_explanation: false\n  };\n}\n\n// Mark solved if correct\nif (classification.category === 'correct') {\n  session.stats.problems_solved++;\n}\n\n// Track conversation in recent_turns (last 15 turns, or 3 when problem changes)\nif (!session.recent_turns) {\n  session.recent_turns = [];\n}\n\nsession.recent_turns.push({\n  student_message: contextData.message,\n  tutor_response: response,\n  category: classification.category,\n  timestamp: new Date().toISOString()\n});\n\n// Keep only last 15 turns (resets to 3 when problem changes in Load Session)\nif (session.recent_turns.length > 15) {\n  session.recent_turns = session.recent_turns.slice(-15);\n}\n\nsession.last_active = new Date().toISOString();\nsession.stats.total_turns++;\n\n// Save session\nstaticData.sessions[contextData._session_id] = session;\n\nreturn [{\n  json: {\n    output: response\n  }\n}];"
+      },
+      "id": "4a56bea0-d8a3-42b8-a3b1-5b45fd64c143",
       "name": "Update Session & Format Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1232,
-        -64
+        288,
+        -544
       ],
       "notes": "Calculates latency, updates session, saves to static data, formats API response"
     },
@@ -596,164 +770,192 @@
         "responseBody": "={{ $json }}",
         "options": {}
       },
-      "id": "56438719-2ea3-4f45-9ff7-259879019779",
+      "id": "af9d69a4-5664-40ce-b5a9-5f971e7cfdc2",
       "name": "Webhook Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        -864,
-        208
+        656,
+        -272
       ],
       "notes": "Returns: {response: string, metadata: {...}}"
-    },
-    {
-      "parameters": {
-        "public": true,
-        "initialMessages": "Hi there! 👋\n\nMy name is Nathan. Ready to learn math?\nHere's your first problem:\nWhat is -3 + 5?",
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
-      "typeVersion": 1.1,
-      "position": [
-        -3616,
-        -208
-      ],
-      "id": "9675d657-6805-4fde-80ad-92abfcbf084c",
-      "name": "When chat message received",
-      "webhookId": "d6075ce6-263d-4b56-82b1-de4f2f013f73"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Normalize Input - Transform chat and webhook payloads to consistent format\n  const inputData = $input.item.json;\n\n  // Detect source type\n  let source = 'unknown';\n  let normalizedData = {};\n\n  // Check if this is from Chat Trigger\n  if (inputData.chatId || inputData.chat || inputData.sessionId) {\n    source = 'chat';\n\n    // Map chat fields to expected format\n    normalizedData = {\n      session_id: inputData.chatId || inputData.sessionId || inputData.chat?.id || `chat_${Date.now()}`,\n      student_id: inputData.userId || inputData.user?.id || inputData.from || 'unknown_user',\n      message: inputData.chatInput || inputData.message || inputData.text || inputData.chatMessage || '',\n\n      // Default problem if none provided\n      current_problem: inputData.current_problem || {\n        id: 'default_problem_1',\n        text: 'What is -3 + 5?',\n        correct_answer: '2'\n      },\n\n      // Metadata\n      _source: 'chat',\n      _original_payload: inputData\n    };\n  }\n  // Check if this is from Webhook Trigger\n  else if (inputData.session_id || inputData.student_id || inputData.current_problem) {\n    source = 'webhook';\n\n    // Webhook already in correct format, just pass through\n    normalizedData = {\n      session_id: inputData.session_id,\n      student_id: inputData.student_id,\n      message: inputData.message,\n      current_problem: inputData.current_problem,\n\n      // Metadata\n      _source: 'webhook',\n      _original_payload: inputData\n    };\n  }\n  // Unknown source - try best guess\n  else {\n    source = 'unknown';\n\n    normalizedData = {\n      session_id: inputData.id || `session_${Date.now()}`,\n      student_id: inputData.user || 'unknown',\n      message: inputData.chatInput || inputData.message || inputData.text || '',\n      current_problem: {\n        id: 'default_problem_1',\n        text: 'What is -3 + 5?',\n        correct_answer: '2'\n      },\n\n      // Metadata\n      _source: 'unknown',\n      _original_payload: inputData,\n      _warning: 'Could not detect source type, using defaults'\n    };\n  }\n\n  return {\n    json: normalizedData\n  };"
-      },
-      "id": "ad295a57-97bb-4f11-9740-779abaeea81e",
-      "name": "Normalize input",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -3408,
-        -64
-      ],
-      "notes": "Loads session from workflow static data, adds start_time for latency tracking"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract response from whichever LLM node executed\n  const llmOutput = $input.item.json;\n  const response = llmOutput.message?.content || llmOutput.text || \"I'm here to help you learn!\";\n\n  // Get data from Enrich Context node\n  const enrichContext = $('Enrich Context').item.json;\n  const startTime = enrichContext._start_time;\n  const latency = Date.now() - startTime;\n\n  // Build turn object\n  const turn = {\n    student_input: enrichContext.message,\n    is_answer: enrichContext.is_answer,\n    category: enrichContext.category,\n    verification: enrichContext.verification || null,\n    tutor_response: response,\n    latency_ms: latency,\n    timestamp: new Date().toISOString()\n  };\n\n  // Update session\n  const session = enrichContext.session;\n\n  // Increment attempt count if was an answer (for next turn)\n  if (enrichContext.is_answer) {\n    session.current_problem.attempt_count++;\n  }\n\n  // Mark problem solved if correct\n  if (enrichContext.category === 'correct') {\n    session.stats.problems_solved++;\n  }\n\n  // Add turn to recent history\n  session.recent_turns.push(turn);\n\n  // Trim to last 5 turns\n  if (session.recent_turns.length > 5) {\n    session.recent_turns = session.recent_turns.slice(-5);\n  }\n\n  // Update metadata\n  session.last_active = new Date().toISOString();\n  session.stats.total_turns++;\n\n  // Save session to workflow static data\n  const staticData = $getWorkflowStaticData('global');\n  if (!staticData.sessions) {\n    staticData.sessions = {};\n  }\n  staticData.sessions[enrichContext._session_id] = session;\n\n  // Return final response\n  return {\n    json: {\n      response: response,\n      metadata: {\n        category: enrichContext.category,\n        confidence: enrichContext.confidence,\n        is_answer: enrichContext.is_answer,\n        verification: enrichContext.verification,\n        attempt_count: enrichContext.attempt_count,\n        escalation_level: enrichContext.escalation_level,\n        latency_ms: latency,\n        timestamp: turn.timestamp\n      }\n    }\n  };"
-      },
-      "id": "ce5d024e-b81d-451e-83a5-a75263f07110",
-      "name": "Update Session & Format Response1",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1056,
-        208
-      ],
-      "notes": "Calculates latency, updates session, saves to static data, formats API response"
     }
   ],
   "pinData": {},
   "connections": {
-    "Webhook Trigger": {
-      "main": [
-        []
-      ]
-    },
-    "Load Session": {
+    "When chat message received": {
       "main": [
         [
           {
-            "node": "Stage 1: Is Answer?",
+            "node": "Normalize input",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Stage 1: Is Answer?": {
+    "Switch: Scaffolding Active?": {
       "main": [
         [
           {
-            "node": "Parse Triage Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Triage Result": {
-      "main": [
-        [
-          {
-            "node": "If Answer",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "If Answer": {
-      "main": [
-        [
-          {
-            "node": "Verify Answer",
+            "node": "AI Agent",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Stage 2b: Non-Answer Intent",
+            "node": "Format for Routing",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Verify Answer": {
+    "Parse Classification": {
       "main": [
         [
           {
-            "node": "Stage 2a: Answer Quality",
+            "node": "Switch: Scaffolding Active?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Stage 2a: Answer Quality": {
+    "Code: Verify Answer": {
       "main": [
         [
           {
-            "node": "Enrich Context",
+            "node": "Parse Classification",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Stage 2b: Non-Answer Intent": {
+    "LLM: Extract Intent & Value": {
       "main": [
         [
           {
-            "node": "Parse Stage 2b",
+            "node": "Code: Verify Answer",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse Stage 2b": {
+    "Prepare Agent Context": {
       "main": [
         [
           {
-            "node": "Enrich Context",
+            "node": "LLM: Extract Intent & Value",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enrich Context": {
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Validate Scaffolding": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Agent Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Routing": {
+      "main": [
+        [
+          {
+            "node": "Build Response Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Agent Output": {
+      "main": [
+        [
+          {
+            "node": "Build Response Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Load Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Session": {
+      "main": [
+        [
+          {
+            "node": "Prepare Agent Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response Context": {
       "main": [
         [
           {
@@ -804,6 +1006,13 @@
         [
           {
             "node": "Response: Off-Topic",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response: Scaffold Progress",
             "type": "main",
             "index": 0
           }
@@ -876,38 +1085,11 @@
         ]
       ]
     },
-    "Update Session & Format Response": {
-      "main": [
-        []
-      ]
-    },
-    "When chat message received": {
+    "Response: Scaffold Progress": {
       "main": [
         [
           {
-            "node": "Normalize input",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Normalize input": {
-      "main": [
-        [
-          {
-            "node": "Load Session",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Session & Format Response1": {
-      "main": [
-        [
-          {
-            "node": "Webhook Response",
+            "node": "Update Session & Format Response",
             "type": "main",
             "index": 0
           }
@@ -919,7 +1101,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "fad2617a-9c64-4b56-b10f-7b0cea53a48f",
+  "versionId": "8333cba1-9674-40ef-8236-6a4274cbe228",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "15fdefe217dd497a3644ac7579dc52a8d91ba7b8a26ac0fbdc9f2ffe89ed0a93"
