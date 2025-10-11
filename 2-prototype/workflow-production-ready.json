@@ -4,7 +4,7 @@
     {
       "parameters": {
         "public": true,
-        "initialMessages": "Hi there! 👋\n\nMy name is Nathan. Ready to learn math?\nHere's your first problem:\nWhat is -3 + 5?",
+        "initialMessages": "Hi there! \ud83d\udc4b\n\nMy name is Nathan. Ready to learn math?\nHere's your first problem:\nWhat is -3 + 5?",
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
@@ -134,7 +134,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are a math tutoring intent classifier and value extractor.\n\nProblem: {{ $json.current_problem.text }}\nStudent's Message: \"{{ $json.student_message }}\"\n\nContext:\n- Scaffolding Active: {{ $json.is_scaffolding_active }}\n- Teach-Back Active: {{ $json.is_teach_back_active }}\n\nYour job: Determine intent and extract numeric values.\n\n**TEACH-BACK SCENARIO**: If teach_back_active = true\nStudent is explaining their reasoning.\nReturn: {\"is_answer\": false, \"category\": \"teach_back_explanation\", \"extracted_value\": null}\n\n**ANSWER ATTEMPT**: Does the message contain a numeric answer?\n- Look for numbers: digits (\"1\", \"2\"), written (\"one\", \"two\"), expressions (\"1/2\", \"0.5\")\n- Include approximations: \"around 2\", \"about two\", \"maybe 1\"\n- \"I think it's one\" = answer attempt ✓\n- \"I don't know what one means\" = NOT an answer ✗\n\nIf YES (answer attempt):\n1. Extract the numeric value (convert written numbers to digits)\n2. Return: {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": <number>}\n\n**NON-ANSWER**: If not an answer attempt:\n- CONCEPTUAL_QUESTION: Asking about concepts (\"what is\", \"why\", \"how does\")\n- STUCK: Indicating confusion/need help (\"don't know\", \"help\", \"stuck\")\n- OFF_TOPIC: Unrelated to math\n\nReturn: {\"is_answer\": false, \"category\": \"conceptual_question|stuck|off_topic\", \"extracted_value\": null}\n\nOUTPUT FORMAT (JSON only):\n{\n  \"is_answer\": true/false,\n  \"category\": \"answer|conceptual_question|stuck|off_topic|teach_back_explanation\",\n  \"extracted_value\": <number or null>,\n  \"confidence\": 0.0-1.0,\n  \"reasoning\": \"brief explanation\"\n}\n\nEXAMPLES:\n\nStudent: \"one\"\n→ {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": 1, \"confidence\": 0.95, \"reasoning\": \"Extracted numeric value 1 from written number\"}\n\nStudent: \"I think it's around two\"\n→ {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": 2, \"confidence\": 0.9, \"reasoning\": \"Approximate answer, extracted value 2\"}\n\nStudent: \"What does negative mean?\"\n→ {\"is_answer\": false, \"category\": \"conceptual_question\", \"extracted_value\": null, \"confidence\": 0.95, \"reasoning\": \"Asking about concept\"}\n\nStudent: \"I don't know\"\n→ {\"is_answer\": false, \"category\": \"stuck\", \"extracted_value\": null, \"confidence\": 0.9, \"reasoning\": \"Indicating need for help\"}\n\nYour response (JSON only):"
+              "content": "=You are a math tutoring intent classifier and value extractor.\n\nProblem: {{ $json.current_problem.text }}\nStudent's Message: \"{{ $json.student_message }}\"\n\nContext:\n- Scaffolding Active: {{ $json.is_scaffolding_active }}\n- Teach-Back Active: {{ $json.is_teach_back_active }}\n\nYour job: Determine intent and extract numeric values.\n\n**CRITICAL EXTRACTION RULE**:\nExtract EXACTLY what the student SAID, NOT what you think they MEANT.\n- If student says \"one\", extract 1 (even if the correct answer is 2)\n- If student says \"eight\", extract 8 (even if the correct answer is 2)\n- DO NOT \"correct\" the student's answer - extract their stated value literally\n- Your job is extraction, NOT evaluation of correctness\n\n**TEACH-BACK SCENARIO**: If teach_back_active = true\nStudent is explaining their reasoning.\nReturn: {\"is_answer\": false, \"category\": \"teach_back_explanation\", \"extracted_value\": null}\n\n**ANSWER ATTEMPT**: Does the message contain a numeric answer?\n- Look for numbers: digits (\"1\", \"2\"), written (\"one\", \"two\"), expressions (\"1/2\", \"0.5\")\n- Include approximations: \"around 2\", \"about two\", \"maybe 1\"\n- \"I think it's one\" = answer attempt \u2713\n- \"I don't know what one means\" = NOT an answer \u2717\n\nIf YES (answer attempt):\n1. Extract the numeric value (convert written numbers to digits)\n2. Return: {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": <number>}\n\n**NON-ANSWER**: If not an answer attempt:\n- CONCEPTUAL_QUESTION: Asking about concepts (\"what is\", \"why\", \"how does\")\n- STUCK: Indicating confusion/need help (\"don't know\", \"help\", \"stuck\")\n- OFF_TOPIC: Unrelated to math\n\nReturn: {\"is_answer\": false, \"category\": \"conceptual_question|stuck|off_topic\", \"extracted_value\": null}\n\nOUTPUT FORMAT (JSON only):\n{\n  \"is_answer\": true/false,\n  \"category\": \"answer|conceptual_question|stuck|off_topic|teach_back_explanation\",\n  \"extracted_value\": <number or null>,\n  \"confidence\": 0.0-1.0,\n  \"reasoning\": \"brief explanation\"\n}\n\nEXAMPLES:\n\nStudent: \"one\" (Problem: \"What is -3 + 5?\")\n\u2192 {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": 1, \"confidence\": 0.95, \"reasoning\": \"Extracted 1 from student's literal answer 'one'\"}\n\nStudent: \"eight\" (Problem: \"What is -3 + 5?\")\n\u2192 {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": 8, \"confidence\": 0.95, \"reasoning\": \"Extracted 8 from student's literal answer 'eight'\"}\n\nStudent: \"I think it's around two\"\n\u2192 {\"is_answer\": true, \"category\": \"answer\", \"extracted_value\": 2, \"confidence\": 0.9, \"reasoning\": \"Approximate answer, extracted value 2\"}\n\nStudent: \"What does negative mean?\"\n\u2192 {\"is_answer\": false, \"category\": \"conceptual_question\", \"extracted_value\": null, \"confidence\": 0.95, \"reasoning\": \"Asking about concept\"}\n\nStudent: \"I don't know\"\n\u2192 {\"is_answer\": false, \"category\": \"stuck\", \"extracted_value\": null, \"confidence\": 0.9, \"reasoning\": \"Indicating need for help\"}\n\nYour response (JSON only):"
             }
           ]
         },
@@ -177,8 +177,22 @@
     },
     {
       "parameters": {
-        "description": "Verifies if a student's numeric answer to the main math problem is correct, close (within 20%), or wrong. Use this ONLY when student gives a numeric answer to the MAIN problem (not a scaffolding question). Returns: {correct: bool, close: bool, student_value: number, correct_value: number}",
-        "jsCode": "// DEBUG: Check what data the tool is receiving\nconsole.log('=== TOOL DEBUG START ===');\nconsole.log('$input:', JSON.stringify($input));\n\ntry {\n  const context = $('Prepare Agent Context').item.json;\n  console.log('Context student_message:', context.student_message);\n  console.log('Context correct_answer:', context.current_problem?.correct_answer);\n  \n  const studentAnswer = String(context.student_message || '').toLowerCase().trim();\n  const correctAnswer = String(context.current_problem.correct_answer || '').toLowerCase().trim();\n  \n  console.log('Parsed studentAnswer:', studentAnswer);\n  console.log('Parsed correctAnswer:', correctAnswer);\n  \n  // Extract just numbers (handle negative, decimals, fractions)\n  let studentNum = studentAnswer.replace(/[^0-9.\\-]/g, '');\n  let correctNum = correctAnswer.replace(/[^0-9.\\-]/g, '');\n  \n  console.log('studentNum:', studentNum, 'correctNum:', correctNum);\n  \n  if (!studentNum || !correctNum) {\n    console.log('ERROR: Could not parse numbers');\n    return 'error: could not parse';\n  }\n  \n  const studentVal = parseFloat(studentNum);\n  const correctVal = parseFloat(correctNum);\n  \n  console.log('studentVal:', studentVal, 'correctVal:', correctVal);\n  \n  if (isNaN(studentVal) || isNaN(correctVal)) {\n    console.log('ERROR: Invalid numbers after parsing');\n    return 'error: invalid number';\n  }\n  \n  const diff = Math.abs(studentVal - correctVal);\n  const percentThreshold = Math.abs(correctVal * 0.2);\n  const closeThreshold = Math.max(percentThreshold, 0.3);\n  \n  const isCorrect = diff < 0.001;\n  const isClose = !isCorrect && diff <= closeThreshold;\n  \n  console.log('diff:', diff, 'isCorrect:', isCorrect, 'isClose:', isClose);\n  \n  // Return ONLY the category keyword - agent must use this exactly\n  let result;\n  if (isCorrect) {\n    result = 'correct';\n  } else if (isClose) {\n    result = 'close';\n  } else {\n    result = 'wrong_operation';\n  }\n  \n  console.log('RETURNING:', result);\n  console.log('=== TOOL DEBUG END ===');\n  return result;\n  \n} catch (error) {\n  console.log('EXCEPTION:', error.message);\n  console.log('=== TOOL DEBUG END (ERROR) ===');\n  return 'error: exception - ' + error.message;\n}"
+        "description": "Verifies if a student's numeric answer to the main math problem is correct, close (within 20%), or wrong. Parameters: student_message (string), correct_answer (string). Returns: 'correct', 'close', or 'wrong_operation'",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "student_message": {
+              "type": "string",
+              "description": "The student's message containing their answer"
+            },
+            "correct_answer": {
+              "type": "string",
+              "description": "The correct answer to the math problem"
+            }
+          },
+          "required": ["student_message", "correct_answer"]
+        },
+        "jsCode": "// Verify Main Answer - Receives parameters from AI Agent\nconst studentMessage = $input.student_message || '';\nconst correctAnswer = $input.correct_answer || '';\n\nif (!studentMessage || !correctAnswer) {\n  return 'error: missing parameters';\n}\n\ntry {\n  const studentAnswer = String(studentMessage).toLowerCase().trim();\n  const correctAnswerStr = String(correctAnswer).toLowerCase().trim();\n  \n  // Extract just numbers (handle negative, decimals, fractions)\n  let studentNum = studentAnswer.replace(/[^0-9.\\-]/g, '');\n  let correctNum = correctAnswerStr.replace(/[^0-9.\\-]/g, '');\n  \n  if (!studentNum || !correctNum) {\n    return 'error: could not parse numbers';\n  }\n  \n  const studentVal = parseFloat(studentNum);\n  const correctVal = parseFloat(correctNum);\n  \n  if (isNaN(studentVal) || isNaN(correctVal)) {\n    return 'error: invalid numbers';\n  }\n  \n  // Calculate difference and thresholds\n  const diff = Math.abs(studentVal - correctVal);\n  const percentThreshold = Math.abs(correctVal * 0.2); // 20%\n  const closeThreshold = Math.max(percentThreshold, 0.3); // At least 0.3\n  \n  const isCorrect = diff < 0.001;\n  const isClose = !isCorrect && diff <= closeThreshold;\n  \n  // Return category as string (agent will parse this)\n  if (isCorrect) {\n    return 'correct';\n  } else if (isClose) {\n    return 'close';\n  } else {\n    return 'wrong_operation';\n  }\n  \n} catch (error) {\n  return 'error: ' + error.message;\n}"
       },
       "id": "86b14e78-13f8-4313-a0c2-e8f2797bab23",
       "name": "Tool: Verify Main Answer",
@@ -192,7 +206,25 @@
     {
       "parameters": {
         "description": "Validates a student's response to a scaffolding sub-question using semantic understanding. Use this ONLY when you previously asked a scaffolding question and the student is now responding to it. Returns: {correct: bool, partially_correct: bool, reasoning: string}",
-        "jsCode": "// Semantic validation using OpenAI\nconst scaffoldingQuestion = $input.scaffolding_question || '';\nconst studentResponse = $input.student_response || '';\nconst problemContext = $input.problem_context || '';\n\nif (!scaffoldingQuestion || !studentResponse) {\n  return { error: true, correct: false, partially_correct: false };\n}\n\nconst openaiApiKey = $credentials.openAiApi.apiKey;\n\nconst prompt = `You are evaluating a student's response to a scaffolding question in a math tutoring session.\n\nMain Problem: ${problemContext}\nScaffolding Question: ${scaffoldingQuestion}\nStudent Response: ${studentResponse}\n\nDetermine if the student's response is:\n- CORRECT: Demonstrates understanding, answer is accurate\n- PARTIALLY_CORRECT: On the right track but incomplete or slightly inaccurate\n- INCORRECT: Misunderstands the concept or gives wrong answer\n\nReturn ONLY valid JSON:\n{\"status\": \"correct|partially_correct|incorrect\", \"reasoning\": \"brief explanation\"}`;\n\nconst response = await fetch('https://api.openai.com/v1/chat/completions', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${openaiApiKey}`\n  },\n  body: JSON.stringify({\n    model: 'gpt-4o-mini',\n    messages: [{ role: 'user', content: prompt }],\n    temperature: 0.2,\n    max_tokens: 150\n  })\n});\n\nconst data = await response.json();\nconst content = data.choices[0].message.content;\n\ntry {\n  const validation = JSON.parse(content);\n  return {\n    correct: validation.status === 'correct',\n    partially_correct: validation.status === 'partially_correct',\n    incorrect: validation.status === 'incorrect',\n    reasoning: validation.reasoning,\n    error: false\n  };\n} catch (error) {\n  return { error: true, correct: false, partially_correct: false };\n}"
+        "schema": {
+          "type": "object",
+          "properties": {
+            "scaffolding_question": {
+              "type": "string",
+              "description": "The scaffolding question that was asked to the student"
+            },
+            "student_response": {
+              "type": "string",
+              "description": "The student's response to the scaffolding question"
+            },
+            "problem_context": {
+              "type": "string",
+              "description": "The main math problem for context"
+            }
+          },
+          "required": ["scaffolding_question", "student_response", "problem_context"]
+        },
+        "jsCode": "// Semantic validation using OpenAI\nconst scaffoldingQuestion = $input.scaffolding_question || '';\nconst studentResponse = $input.student_response || '';\nconst problemContext = $input.problem_context || '';\n\nif (!scaffoldingQuestion || !studentResponse) {\n  return JSON.stringify({ error: true, correct: false, partially_correct: false });\n}\n\nconst openaiApiKey = $credentials.openAiApi.apiKey;\n\nconst prompt = `You are evaluating a student's response to a scaffolding question in a math tutoring session.\n\nMain Problem: ${problemContext}\nScaffolding Question: ${scaffoldingQuestion}\nStudent Response: ${studentResponse}\n\n**CRITICAL: Accept text and numeric forms as equivalent**\n- minus 2 = -2 = negative 2 = negative two\n- five = 5\n- zero = 0\n- Focus on SEMANTIC MEANING, not exact string matching\n\nDetermine if the student's response is:\n- CORRECT: Demonstrates understanding, answer is accurate (accept equivalent text/numeric forms)\n- PARTIALLY_CORRECT: On the right track but incomplete or slightly inaccurate\n- INCORRECT: Misunderstands the concept or gives wrong answer\n\nEXAMPLES:\nQuestion: What number do we get when we start at -3 and add 1?\n- Student says minus 2 → CORRECT (equivalent to -2)\n- Student says negative two → CORRECT (equivalent to -2)\n- Student says -2 → CORRECT\n- Student says 2 → INCORRECT (wrong sign)\n\nReturn ONLY valid JSON:\n{\"status\": \"correct|partially_correct|incorrect\", \"reasoning\": \"brief explanation\"}`;\n\nconst response = await fetch('https://api.openai.com/v1/chat/completions', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${openaiApiKey}`\n  },\n  body: JSON.stringify({\n    model: 'gpt-4o-mini',\n    messages: [{ role: 'user', content: prompt }],\n    temperature: 0.2,\n    max_tokens: 150\n  })\n});\n\nconst data = await response.json();\nconst content = data.choices[0].message.content;\n\ntry {\n  const validation = JSON.parse(content);\n  return JSON.stringify({\n    correct: validation.status === 'correct',\n    partially_correct: validation.status === 'partially_correct',\n    incorrect: validation.status === 'incorrect',\n    reasoning: validation.reasoning,\n    error: false\n  });\n} catch (error) {\n  return JSON.stringify({ error: true, correct: false, partially_correct: false });\n}"
       },
       "id": "90f04f83-b18b-46d7-9ef9-65a04afc8f69",
       "name": "Tool: Validate Scaffolding",
@@ -205,7 +237,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build context for AI Agent\nconst inputData = $input.item.json;\nconst sessionData = $('Load Session').item.json;\nconst session = sessionData.session;\n\nconst recentTurns = session.recent_turns || [];\nconst lastTutorMessage = recentTurns.length > 0 ? recentTurns[recentTurns.length - 1]?.tutor_response || '' : '';\nconst lastCategory = recentTurns.length > 0 ? recentTurns[recentTurns.length - 1]?.category : null;\n\n// Check if last turn is from current problem (not previous problem)\nconst lastTurnFromCurrentProblem = recentTurns.length > 0 && \n  !recentTurns[recentTurns.length - 1]?.is_previous_problem;\n\n// Get state from session (preferred) or detect heuristically (fallback)\nconst scaffoldingState = session.current_problem?.scaffolding || { active: false, depth: 0, last_question: null };\nconst teachBackState = session.current_problem?.teach_back || { active: false, awaiting_explanation: false };\n\n// Fallback: Detect if we're in scaffolding mode (if state not set)\nif (!scaffoldingState.active && recentTurns.length > 0) {\n  const hasQuestionMark = lastTutorMessage.includes('?');\n  const isScaffoldingQuestion = lastTurnFromCurrentProblem && hasQuestionMark && (\n    lastTutorMessage.toLowerCase().includes('what does') ||\n    (lastTutorMessage.toLowerCase().includes('what is') && \n      !lastTutorMessage.toLowerCase().includes(session.current_problem.text.toLowerCase())) ||\n    lastTutorMessage.toLowerCase().includes('mean') ||\n    lastTutorMessage.toLowerCase().includes('think about') ||\n    lastTutorMessage.toLowerCase().includes('how') ||\n    lastTutorMessage.toLowerCase().includes('can you tell me') ||\n    lastTutorMessage.toLowerCase().includes('where is') ||\n    lastTutorMessage.toLowerCase().includes('where does') ||\n    lastTutorMessage.toLowerCase().includes('show me') ||\n    lastTutorMessage.toLowerCase().includes('visualize') ||\n    lastTutorMessage.toLowerCase().includes('represent') ||\n    lastTutorMessage.toLowerCase().includes('which direction') ||\n    lastTutorMessage.toLowerCase().includes(\"let's start\")\n  );\n  \n  if (isScaffoldingQuestion) {\n    scaffoldingState.active = true;\n    scaffoldingState.last_question = lastTutorMessage;\n  }\n}\n\n// Fallback: Detect if we're in teach-back mode (if state not set)\nif (!teachBackState.active && lastTurnFromCurrentProblem && lastCategory === 'correct') {\n  const isTeachBackQuestion = (\n    lastTutorMessage.toLowerCase().includes('explain') ||\n    lastTutorMessage.toLowerCase().includes('how did you') ||\n    lastTutorMessage.toLowerCase().includes('walk me through') ||\n    lastTutorMessage.toLowerCase().includes('tell me how')\n  );\n  \n  if (isTeachBackQuestion) {\n    teachBackState.active = true;\n    teachBackState.awaiting_explanation = true;\n  }\n}\n\nreturn [{\n  json: {\n    student_message: inputData.message,\n    current_problem: inputData.current_problem,\n    attempt_count: session.current_problem?.attempt_count || 1,\n    is_scaffolding_active: scaffoldingState.active,\n    scaffolding_depth: scaffoldingState.depth,\n    scaffolding_last_question: scaffoldingState.last_question || lastTutorMessage,\n    is_teach_back_active: teachBackState.active,\n    teach_back_awaiting: teachBackState.awaiting_explanation,\n    last_tutor_question: scaffoldingState.active ? (scaffoldingState.last_question || lastTutorMessage) : null,\n    last_category: lastCategory,\n    session_id: sessionData._session_id,\n    student_id: sessionData.student_id,\n    _session: session,\n    _start_time: sessionData._start_time\n  }\n}];"
+        "jsCode": "// Build context for AI Agent\nconst inputData = $input.item.json;\nconst sessionData = $('Load Session').item.json;\nconst session = sessionData.session;\n\nconst recentTurns = session.recent_turns || [];\nconst lastTutorMessage = recentTurns.length > 0 ? recentTurns[recentTurns.length - 1]?.tutor_response || '' : '';\nconst lastCategory = recentTurns.length > 0 ? recentTurns[recentTurns.length - 1]?.category : null;\n\n// Check if last turn is from current problem (not previous problem)\nconst lastTurnFromCurrentProblem = recentTurns.length > 0 && \n  !recentTurns[recentTurns.length - 1]?.is_previous_problem;\n\n// Get state from session (preferred) or detect heuristically (fallback)\nconst scaffoldingState = session.current_problem?.scaffolding || { active: false, depth: 0, last_question: null };\nconst teachBackState = session.current_problem?.teach_back || { active: false, awaiting_explanation: false };\n\n// Fallback: Detect if we're in scaffolding mode (if state not set)\nif (!scaffoldingState.active && recentTurns.length > 0) {\n  const hasQuestionMark = lastTutorMessage.includes('?');\n  const isScaffoldingQuestion = lastTurnFromCurrentProblem && hasQuestionMark && (\n    lastTutorMessage.toLowerCase().includes('what does') ||\n    (lastTutorMessage.toLowerCase().includes('what is') && \n      !lastTutorMessage.toLowerCase().includes(session.current_problem.text.toLowerCase())) ||\n    lastTutorMessage.toLowerCase().includes('mean') ||\n    lastTutorMessage.toLowerCase().includes('think about') ||\n    lastTutorMessage.toLowerCase().includes('how') ||\n    lastTutorMessage.toLowerCase().includes('can you tell me') ||\n    lastTutorMessage.toLowerCase().includes('where is') ||\n    lastTutorMessage.toLowerCase().includes('where does') ||\n    lastTutorMessage.toLowerCase().includes('show me') ||\n    lastTutorMessage.toLowerCase().includes('visualize') ||\n    lastTutorMessage.toLowerCase().includes('represent') ||\n    lastTutorMessage.toLowerCase().includes('which direction') ||\n    lastTutorMessage.toLowerCase().includes(\"let's start\")\n  );\n  \n  if (isScaffoldingQuestion) {\n    scaffoldingState.active = true;\n    scaffoldingState.last_question = lastTutorMessage;\n  }\n}\n\n// Fallback: Detect if we're in teach-back mode (if state not set)\nif (!teachBackState.active && lastTurnFromCurrentProblem && lastCategory === 'correct') {\n  const isTeachBackQuestion = (\n    lastTutorMessage.toLowerCase().includes('explain') ||\n    lastTutorMessage.toLowerCase().includes('how did you') ||\n    lastTutorMessage.toLowerCase().includes('walk me through') ||\n    lastTutorMessage.toLowerCase().includes('tell me how')\n  );\n  \n  if (isTeachBackQuestion) {\n    teachBackState.active = true;\n    teachBackState.awaiting_explanation = true;\n  }\n}\n\nreturn [{\n  json: {\n    student_message: inputData.message,\n    current_problem: session.current_problem,\n    attempt_count: session.current_problem?.attempt_count || 1,\n    is_scaffolding_active: scaffoldingState.active,\n    scaffolding_depth: scaffoldingState.depth,\n    scaffolding_last_question: scaffoldingState.last_question || lastTutorMessage,\n    is_teach_back_active: teachBackState.active,\n    teach_back_awaiting: teachBackState.awaiting_explanation,\n    last_tutor_question: scaffoldingState.active ? (scaffoldingState.last_question || lastTutorMessage) : null,\n    last_category: lastCategory,\n    session_id: sessionData._session_id,\n    student_id: sessionData.student_id,\n    _session: session,\n    _start_time: sessionData._start_time\n  }\n}];"
       },
       "id": "0e5bffe4-b4be-4482-a4e3-aee83889331b",
       "name": "Prepare Agent Context",
@@ -223,7 +255,7 @@
         "text": "={{ $json.student_message }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "=You are a scaffolding validation agent.\n\nCONTEXT:\n- Main Problem: {{ $json.current_problem.text }}\n- Last Scaffolding Question: {{ $json.scaffolding_last_question }}\n- Student's Response: {{ $json.student_message }}\n\nYOUR JOB:\nThe student is responding to a scaffolding sub-question. Use the validate_scaffolding tool to check if their response is correct.\n\nTOOL USAGE:\nCall validate_scaffolding with:\n- scaffolding_question: \"{{ $json.scaffolding_last_question }}\"\n- student_response: \"{{ $json.student_message }}\"\n- problem_context: \"{{ $json.current_problem.text }}\"\n\nThe tool will return: {correct: bool, partially_correct: bool, reasoning: string}\n\nBased on tool result:\n- If correct: Return {\"category\": \"scaffold_progress\", \"is_main_problem_attempt\": false, \"confidence\": 0.9, \"reasoning\": \"tool result reasoning\"}\n- If partially_correct: Return {\"category\": \"stuck\", \"is_main_problem_attempt\": false, \"confidence\": 0.85, \"reasoning\": \"tool result reasoning\"}\n- If incorrect: Return {\"category\": \"stuck\", \"is_main_problem_attempt\": false, \"confidence\": 0.85, \"reasoning\": \"tool result reasoning\"}\n\nIMPORTANT:\n- ALWAYS call the validate_scaffolding tool\n- Return valid JSON only\n- Copy the reasoning from the tool result"
+          "systemMessage": "=You are a tool-calling agent. Your ONLY job is to call the appropriate tool.\n\nCRITICAL: You MUST call exactly one tool. NEVER classify responses yourself.\n\nCONTEXT:\n- Main Problem: {{ $json.current_problem.text }} (answer: {{ $json.current_problem.correct_answer }})\n- Last Question: {{ $json.scaffolding_last_question }}\n- Student Said: {{ $json.student_message }}\n\nSTEP 1: Which tool?\n\nDoes the student's message contain:\n- Phrases like \"the answer is\", \"it's\", \"I think it's\" + a number?\n- A direct numeric answer to the main problem?\n\nYES → Call verify_main_answer\nNO → Call validate_scaffolding\n\nSTEP 2: Call the tool (REQUIRED)\n\n**Option A - verify_main_answer:**\nverify_main_answer(\n  student_message: \"{{ $json.student_message }}\",\n  correct_answer: \"{{ $json.current_problem.correct_answer }}\"\n)\n\nTool returns: \"correct\", \"close\", or \"wrong_operation\"\n\nThen return JSON:\n- \"correct\" → {\"category\": \"correct\", \"is_main_problem_attempt\": true, \"confidence\": 0.95, \"reasoning\": \"Student correctly solved main problem\"}\n- \"close\" → {\"category\": \"close\", \"is_main_problem_attempt\": true, \"confidence\": 0.9, \"reasoning\": \"Student's answer is close\"}\n- \"wrong_operation\" → {\"category\": \"wrong_operation\", \"is_main_problem_attempt\": true, \"confidence\": 0.9, \"reasoning\": \"Student's answer is incorrect\"}\n\n**Option B - validate_scaffolding:**\nvalidate_scaffolding(\n  scaffolding_question: \"{{ $json.scaffolding_last_question }}\",\n  student_response: \"{{ $json.student_message }}\",\n  problem_context: \"{{ $json.current_problem.text }}\"\n)\n\nTool returns JSON: {correct: bool, partially_correct: bool, reasoning: string}\n\nThen return JSON:\n- correct=true → {\"category\": \"scaffold_progress\", \"is_main_problem_attempt\": false, \"confidence\": 0.9, \"reasoning\": \"(copy tool reasoning)\"}\n- partially_correct=true or incorrect=true → {\"category\": \"stuck\", \"is_main_problem_attempt\": false, \"confidence\": 0.85, \"reasoning\": \"(copy tool reasoning)\"}\n\nREMEMBER: Always call a tool first. Never classify on your own."
         }
       },
       "id": "09f5d88a-050a-4c95-b455-8c2cd6240f0b",
@@ -298,7 +330,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Load or initialize session from workflow static data\nconst sessionId = $input.item.json.session_id;\nconst studentId = $input.item.json.student_id;\nconst currentProblem = $input.item.json.current_problem;\n\n// Get existing sessions from workflow static data\nconst sessions = $getWorkflowStaticData('global')?.sessions || {};\n\nlet session = sessions[sessionId];\n\n// Check if session exists and hasn't expired (30-minute TTL)\nif (session) {\n  const lastActive = new Date(session.last_active);\n  const now = new Date();\n  const minutesInactive = (now - lastActive) / 1000 / 60;\n\n  if (minutesInactive > 30) {\n    // Session expired - treat as new session\n    session = null;\n  }\n}\n\nif (!session) {\n  // Create new session\n  session = {\n    session_id: sessionId,\n    student_id: studentId,\n    created_at: new Date().toISOString(),\n    last_active: new Date().toISOString(),\n    current_problem: {\n      id: currentProblem.id,\n      text: currentProblem.text,\n      correct_answer: currentProblem.correct_answer,\n      attempt_count: 0,\n      scaffolding: {\n        active: false,\n        depth: 0,\n        last_question: null\n      },\n      teach_back: {\n        active: false,\n        awaiting_explanation: false\n      }\n    },\n    recent_turns: [],\n    stats: {\n      total_turns: 0,\n      problems_attempted: 1,\n      problems_solved: 0\n    }\n  };\n}\n\n// Check if problem changed (Hybrid Memory: keep only last 3 turns for continuity)\nif (session.current_problem.id !== currentProblem.id) {\n  // Keep last 3 turns from previous problem for continuity\n  if (session.recent_turns && session.recent_turns.length > 0) {\n    session.recent_turns = session.recent_turns.slice(-3);\n    // Mark these as previous problem context\n    session.recent_turns.forEach(turn => {\n      turn.is_previous_problem = true;\n    });\n  }\n  \n  // Reset problem data\n  session.current_problem = {\n    id: currentProblem.id,\n    text: currentProblem.text,\n    correct_answer: currentProblem.correct_answer,\n    attempt_count: 0,\n    scaffolding: {\n      active: false,\n      depth: 0,\n      last_question: null\n    },\n    teach_back: {\n      active: false,\n      awaiting_explanation: false\n    }\n  };\n  session.stats.problems_attempted++;\n}\n\n// Add start time for latency tracking\nconst startTime = Date.now();\n\nreturn {\n  json: {\n    ...$input.item.json,\n    session: session,\n    _session_id: sessionId,\n    _start_time: startTime\n  }\n};"
+        "jsCode": "// Load or initialize session from REDIS\n// FIX: Read from Normalize Input, not from Redis node output\nconst normalizedInput = $('Normalize input').first().json;\nconst sessionId = normalizedInput.session_id;\nconst studentId = normalizedInput.student_id;\nconst currentProblem = normalizedInput.current_problem || {\n  id: 'default_problem_1',\n  text: 'What is -3 + 5?',\n  correct_answer: '2'\n};\n\n// Get session from Redis Get node\nlet session = null;\nlet sessionFound = false;\n\ntry {\n  const redisData = $('Redis: Get Session').first().json;\n  // Redis returns {key: '...', value: '...'} or {key: '...', propertyName: '...'}\n  if (redisData && (redisData.value || redisData.propertyName)) {\n    try {\n      session = JSON.parse(redisData.value || redisData.propertyName);\n      sessionFound = true;\n    } catch (error) {\n      session = null;\n    }\n  }\n} catch (error) {\n  // Redis node failed, will create new session\n}\n\nif (!session) {\n  // Create new session\n  session = {\n    session_id: sessionId,\n    student_id: studentId,\n    created_at: new Date().toISOString(),\n    last_active: new Date().toISOString(),\n    current_problem: {\n      id: currentProblem.id,\n      text: currentProblem.text,\n      correct_answer: currentProblem.correct_answer,\n      attempt_count: 0,\n      scaffolding: {\n        active: false,\n        depth: 0,\n        last_question: null\n      },\n      teach_back: {\n        active: false,\n        awaiting_explanation: false\n      }\n    },\n    recent_turns: [],\n    stats: {\n      total_turns: 0,\n      problems_attempted: 1,\n      problems_solved: 0\n    }\n  };\n}\n\n// Check if problem changed (Hybrid Memory: keep only last 3 turns for continuity)\nif (session.current_problem && session.current_problem.id !== currentProblem.id) {\n  // Keep last 3 turns from previous problem for continuity\n  if (session.recent_turns && session.recent_turns.length > 0) {\n    session.recent_turns = session.recent_turns.slice(-3);\n    session.recent_turns.forEach(turn => {\n      turn.is_previous_problem = true;\n    });\n  }\n\n  // Reset problem data\n  session.current_problem = {\n    id: currentProblem.id,\n    text: currentProblem.text,\n    correct_answer: currentProblem.correct_answer,\n    attempt_count: 0,\n    scaffolding: {\n      active: false,\n      depth: 0,\n      last_question: null\n    },\n    teach_back: {\n      active: false,\n      awaiting_explanation: false\n    }\n  };\n  session.stats.problems_attempted++;\n}\n\n// Ensure required fields exist (defensive programming)\nif (!session.recent_turns) {\n  session.recent_turns = [];\n}\nif (!session.current_problem) {\n  session.current_problem = {\n    id: currentProblem.id,\n    text: currentProblem.text,\n    correct_answer: currentProblem.correct_answer,\n    attempt_count: 0,\n    scaffolding: { active: false, depth: 0, last_question: null },\n    teach_back: { active: false, awaiting_explanation: false }\n  };\n} else {\n  // FIX: Even if session.current_problem exists, ensure text and correct_answer are present\n  // This fixes the bug where Redis has incomplete current_problem from previous saves\n  if (!session.current_problem.text || !session.current_problem.correct_answer || !session.current_problem.id) {\n    session.current_problem.id = session.current_problem.id || currentProblem.id;\n    session.current_problem.text = session.current_problem.text || currentProblem.text;\n    session.current_problem.correct_answer = session.current_problem.correct_answer || currentProblem.correct_answer;\n  }\n  // Ensure nested objects exist\n  if (!session.current_problem.scaffolding) {\n    session.current_problem.scaffolding = { active: false, depth: 0, last_question: null };\n  }\n  if (!session.current_problem.teach_back) {\n    session.current_problem.teach_back = { active: false, awaiting_explanation: false };\n  }\n}\n\n// Add start time for latency tracking\nconst startTime = Date.now();\n\nreturn {\n  json: {\n    // FIX: Spread normalizedInput (has message field), not Redis output\n    ...normalizedInput,\n    // Then our explicit fields OVERRIDE\n    session: session,\n    _session_id: sessionId,\n    _start_time: startTime,\n    current_problem: currentProblem\n  }\n};"
       },
       "id": "264469af-1d8c-41e3-a7a0-7e268f6461c2",
       "name": "Load Session",
@@ -509,7 +541,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are an encouraging math tutor. The student just gave the CORRECT answer.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} ✓ CORRECT\n{% if $json.is_scaffolding_active %}Student solved this after working through scaffolding questions.{% endif %}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Get them to explain their reasoning (teach-back method - INITIATE teach-back mode).\n\n{% if $json.is_scaffolding_active %}\n{# They solved it after scaffolding - acknowledge the scaffolding helped #}\n- Celebrate that they figured it out with the scaffolding steps\n- Ask them to explain how they put the pieces together to get {{$json.message}}\n- Reference the scaffolding steps they worked through (check chat history)\n{% elif $json.attempt_count === 1 %}\n{# They got it right on the first try #}\n- They got it right on the first try! Ask them to walk you through their thinking.\n{% else %}\n{# They worked through it #}\n- They worked through it and got there! Ask them to explain how they figured it out.\n{% endif %}\n\nCRITICAL GROUNDING RULES:\n- Reference the ACTUAL problem in your teach-back question: {{$json.current_problem.text}}\n- Ask them to explain how they solved THIS specific problem\n- Don't ask generic questions - tie it to the problem they just solved\n{% if $json.is_scaffolding_active %}\n- Acknowledge the scaffolding journey they went through\n{% endif %}\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Celebrate their success briefly (1-2 words: \"Perfect!\", \"Excellent!\", \"You got it!\")\n- Ask them to explain their reasoning about THIS problem\n- 1-2 sentences total\n- Encouraging, warm tone\n\nYour response:"
+              "content": "=You are an encouraging math tutor. The student just gave the CORRECT answer.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} \u2713 CORRECT\n{% if $json.is_scaffolding_active %}Student solved this after working through scaffolding questions.{% endif %}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Get them to explain their reasoning (teach-back method - INITIATE teach-back mode).\n\n{% if $json.is_scaffolding_active %}\n{# They solved it after scaffolding - acknowledge the scaffolding helped #}\n- Celebrate that they figured it out with the scaffolding steps\n- Ask them to explain how they put the pieces together to get {{$json.message}}\n- Reference the scaffolding steps they worked through (check chat history)\n{% elif $json.attempt_count === 1 %}\n{# They got it right on the first try #}\n- They got it right on the first try! Ask them to walk you through their thinking.\n{% else %}\n{# They worked through it #}\n- They worked through it and got there! Ask them to explain how they figured it out.\n{% endif %}\n\nCRITICAL GROUNDING RULES:\n- Reference the ACTUAL problem in your teach-back question: {{$json.current_problem.text}}\n- Ask them to explain how they solved THIS specific problem\n- Don't ask generic questions - tie it to the problem they just solved\n{% if $json.is_scaffolding_active %}\n- Acknowledge the scaffolding journey they went through\n{% endif %}\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Celebrate their success briefly (1-2 words: \"Perfect!\", \"Excellent!\", \"You got it!\")\n- Ask them to explain their reasoning about THIS problem\n- 1-2 sentences total\n- Encouraging, warm tone\n\nYour response:"
             }
           ]
         },
@@ -725,7 +757,7 @@
         "messages": {
           "values": [
             {
-              "content": "=You are an encouraging math tutor. The student just answered a scaffolding question correctly!\n\nMain Problem: {{$json.current_problem.text}}\nStudent's response to scaffolding question: \"{{$json.message}}\" ✓\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Acknowledge their correct answer and either (1) ask the next scaffolding step, or (2) guide them back to solving the main problem.\n\nSTRATEGY:\n- If this was an early scaffolding step: Acknowledge briefly (\"Great!\", \"Exactly!\") then ask the NEXT step that builds toward the main problem\n- If this was the final scaffolding step: Acknowledge and ask them to now solve the MAIN problem using what they learned\n\nCRITICAL GROUNDING RULES:\n- Stay focused on the MAIN problem: {{$json.current_problem.text}}\n- Use the EXACT numbers from the main problem in your next scaffolding question\n- DO NOT repeat the same scaffolding question - progress to the next step\n- Check conversation history to see what was already asked\n- Each new scaffolding question should be one small step closer to the final answer\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Briefly acknowledge their correct answer (1-2 words: \"Great!\", \"Exactly!\", \"Perfect!\")\n- Then immediately ask the next step OR guide back to main problem\n- 1-2 sentences total\n- Encouraging, forward-moving tone\n- DO NOT give the final answer to the main problem\n\nYour response:"
+              "content": "=You are an encouraging math tutor. The student just answered a scaffolding question correctly!\n\nMain Problem: {{$json.current_problem.text}}\nStudent's response to scaffolding question: \"{{$json.message}}\" \u2713\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Acknowledge their correct answer and either (1) ask the next scaffolding step, or (2) guide them back to solving the main problem.\n\nSTRATEGY:\n- If this was an early scaffolding step: Acknowledge briefly (\"Great!\", \"Exactly!\") then ask the NEXT step that builds toward the main problem\n- If this was the final scaffolding step: Acknowledge and ask them to now solve the MAIN problem using what they learned\n\nCRITICAL GROUNDING RULES:\n- Stay focused on the MAIN problem: {{$json.current_problem.text}}\n- Use the EXACT numbers from the main problem in your next scaffolding question\n- DO NOT repeat the same scaffolding question - progress to the next step\n- Check conversation history to see what was already asked\n- Each new scaffolding question should be one small step closer to the final answer\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Briefly acknowledge their correct answer (1-2 words: \"Great!\", \"Exactly!\", \"Perfect!\")\n- Then immediately ask the next step OR guide back to main problem\n- 1-2 sentences total\n- Encouraging, forward-moving tone\n- DO NOT give the final answer to the main problem\n\nYour response:"
             }
           ]
         },
@@ -752,7 +784,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Update session with conversation tracking and state management\nconst contextData = $('Build Response Context').item.json;\nconst responseData = $input.item.json;\nconst response = responseData.message?.content || responseData.text || \"I'm here to help you learn!\";\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.sessions) {\n  staticData.sessions = {};\n}\n\nconst session = contextData._session;\nconst classification = contextData._classification;\nconst category = classification.original_category || classification.category;\n\n// Only increment attempt_count for main problem attempts\nif (classification.is_main_problem_attempt) {\n  session.current_problem.attempt_count++;\n}\n\n// STATE TRANSITIONS\n\n// 1. SCAFFOLDING STATE MANAGEMENT\nif (category === 'stuck' && !contextData.is_scaffolding_active && !contextData.is_teach_back_active) {\n  // ENTER scaffolding mode\n  session.current_problem.scaffolding = {\n    active: true,\n    depth: 1,\n    last_question: response\n  };\n} else if (category === 'scaffold_progress') {\n  // PROGRESS through scaffolding (student answered scaffolding question correctly)\n  if (session.current_problem.scaffolding) {\n    session.current_problem.scaffolding.depth++;\n    session.current_problem.scaffolding.last_question = response;\n  }\n} else if (category === 'correct' && contextData.is_scaffolding_active) {\n  // EXIT scaffolding (student solved main problem)\n  session.current_problem.scaffolding = {\n    active: false,\n    depth: 0,\n    last_question: null\n  };\n}\n\n// 2. TEACH-BACK STATE MANAGEMENT\nif (category === 'correct' && !contextData.is_teach_back_active) {\n  // ENTER teach-back mode (student got correct answer, now ask for explanation)\n  session.current_problem.teach_back = {\n    active: true,\n    awaiting_explanation: true\n  };\n} else if (category === 'teach_back_explanation' || (contextData.is_teach_back_active && contextData.teach_back_awaiting)) {\n  // EXIT teach-back mode (student provided explanation)\n  session.current_problem.teach_back = {\n    active: false,\n    awaiting_explanation: false\n  };\n}\n\n// Mark solved if correct\nif (classification.category === 'correct') {\n  session.stats.problems_solved++;\n}\n\n// Track conversation in recent_turns (last 15 turns, or 3 when problem changes)\nif (!session.recent_turns) {\n  session.recent_turns = [];\n}\n\nsession.recent_turns.push({\n  student_message: contextData.message,\n  tutor_response: response,\n  category: classification.category,\n  timestamp: new Date().toISOString()\n});\n\n// Keep only last 15 turns (resets to 3 when problem changes in Load Session)\nif (session.recent_turns.length > 15) {\n  session.recent_turns = session.recent_turns.slice(-15);\n}\n\nsession.last_active = new Date().toISOString();\nsession.stats.total_turns++;\n\n// Save session\nstaticData.sessions[contextData._session_id] = session;\n\nreturn [{\n  json: {\n    output: response\n  }\n}];"
+        "jsCode": "// Update session with conversation tracking (REDIS)\nconst contextData = $('Build Response Context').item.json;\nconst responseData = $input.item.json;\nconst response = responseData.message?.content || responseData.text || \"I'm here to help you learn!\";\n\nconst session = contextData._session;\nconst classification = contextData._classification;\nconst category = classification.original_category || classification.category;\n\n// Only increment attempt_count for main problem attempts\nif (classification.is_main_problem_attempt) {\n  session.current_problem.attempt_count++;\n}\n\n// STATE TRANSITIONS\n\n// 1. SCAFFOLDING STATE MANAGEMENT\nif (category === 'stuck' && !contextData.is_scaffolding_active && !contextData.is_teach_back_active) {\n  session.current_problem.scaffolding = {\n    active: true,\n    depth: 1,\n    last_question: response\n  };\n} else if (category === 'scaffold_progress') {\n  if (session.current_problem.scaffolding) {\n    session.current_problem.scaffolding.depth++;\n    session.current_problem.scaffolding.last_question = response;\n  }\n} else if (category === 'stuck' && contextData.is_scaffolding_active) {\n  // Keep scaffolding active when student is stuck during scaffolding\n  if (session.current_problem.scaffolding) {\n    session.current_problem.scaffolding.last_question = response;\n    // Keep active and depth unchanged\n  }\n} else if (category === 'correct' && contextData.is_scaffolding_active) {\n  session.current_problem.scaffolding = {\n    active: false,\n    depth: 0,\n    last_question: null\n  };\n}\n\n// 2. TEACH-BACK STATE MANAGEMENT\nif (category === 'correct' && !contextData.is_teach_back_active) {\n  session.current_problem.teach_back = {\n    active: true,\n    awaiting_explanation: true\n  };\n} else if (category === 'teach_back_explanation') {\n  session.current_problem.teach_back = {\n    active: false,\n    awaiting_explanation: false\n  };\n}\n\n// Mark solved if correct\nif (classification.category === 'correct') {\n  session.stats.problems_solved++;\n}\n\n// Track conversation in recent_turns\nif (!session.recent_turns) {\n  session.recent_turns = [];\n}\n\nsession.recent_turns.push({\n  student_message: contextData.message,\n  tutor_response: response,\n  category: classification.category,\n  timestamp: new Date().toISOString()\n});\n\n// Keep only last 15 turns\nif (session.recent_turns.length > 15) {\n  session.recent_turns = session.recent_turns.slice(-15);\n}\n\nsession.last_active = new Date().toISOString();\nsession.stats.total_turns++;\n\n\n// Debug info for n8n UI\nconst debugInfo = {\n  state_before: {\n    scaffolding_active: contextData.is_scaffolding_active,\n    teach_back_active: contextData.is_teach_back_active\n  },\n  state_after: {\n    scaffolding_active: session.current_problem.scaffolding.active,\n    teach_back_active: session.current_problem.teach_back.active\n  },\n  classification: {\n    category: classification.category,\n    original_category: classification.original_category,\n    is_main_problem_attempt: classification.is_main_problem_attempt\n  }\n};\n\nreturn [{\n  json: {\n    output: response,\n    _session_id: contextData._session_id,\n    _session_for_redis: session,\n    _debug: debugInfo\n  }\n}];"
       },
       "id": "4a56bea0-d8a3-42b8-a3b1-5b45fd64c143",
       "name": "Update Session & Format Response",
@@ -779,6 +811,51 @@
         -272
       ],
       "notes": "Returns: {response: string, metadata: {...}}"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "=tutor_session:{{ $json.session_id }}"
+      },
+      "id": "redis-get-session-1760198896337",
+      "name": "Redis: Get Session",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -1600,
+        -544
+      ],
+      "credentials": {
+        "redis": {
+          "id": "redis_session_storage_1760198896337",
+          "name": "Redis Session Storage"
+        }
+      },
+      "notes": "Loads session from Redis (returns null if not exists)"
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=tutor_session:{{ $json._session_id }}",
+        "value": "={{ JSON.stringify($json._session_for_redis) }}",
+        "ttl": 1800,
+        "setExpirationTime": true
+      },
+      "id": "redis-set-session-1760198896337",
+      "name": "Redis: Save Session",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -544
+      ],
+      "credentials": {
+        "redis": {
+          "id": "redis_session_storage_1760198896337",
+          "name": "Redis Session Storage"
+        }
+      },
+      "notes": "Saves session to Redis with 30-min TTL"
     }
   ],
   "pinData": {},
@@ -889,6 +966,17 @@
         ]
       ]
     },
+    "Tool: Verify Main Answer": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "AI Agent": {
       "main": [
         [
@@ -937,7 +1025,7 @@
       "main": [
         [
           {
-            "node": "Load Session",
+            "node": "Redis: Get Session",
             "type": "main",
             "index": 0
           }
@@ -1095,6 +1183,39 @@
           }
         ]
       ]
+    },
+    "Redis: Get Session": {
+      "main": [
+        [
+          {
+            "node": "Load Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session & Format Response": {
+      "main": [
+        [
+          {
+            "node": "Redis: Save Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis: Save Session": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -1107,5 +1228,21 @@
     "instanceId": "15fdefe217dd497a3644ac7579dc52a8d91ba7b8a26ac0fbdc9f2ffe89ed0a93"
   },
   "id": "Ar0sDK9eGPw0IIIM",
-  "tags": []
+  "tags": [],
+  "credentials": {
+    "redis": {
+      "redis_session_storage_1760198896337": {
+        "id": "redis_session_storage_1760198896337",
+        "name": "Redis Session Storage",
+        "type": "redis",
+        "data": {
+          "host": "redis-15440.c61.us-east-1-3.ec2.redns.redis-cloud.com",
+          "port": 15440,
+          "password": "A69mi1riyngnd60rhnr4zd1kgyecac0p1q7fgp1r6gzf4hm4c0h",
+          "database": 0,
+          "ssl": true
+        }
+      }
+    }
+  }
 }
