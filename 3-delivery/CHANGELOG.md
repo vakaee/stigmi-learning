@@ -321,6 +321,62 @@ Attempt 3+: Teach (direct instruction + worked example)
 
 ---
 
+### Bug #4: Scaffolding Answer Validation - Flexible Format Recognition
+
+**Issue**: Student response "5 spaces" to scaffolding question "how many spaces do you need to move to the right?" was incorrectly classified as "stuck" instead of "scaffold_progress"
+
+**Cause**: AI Agent system message didn't provide clear evaluation guidelines for flexible answer formats (numeric, textual, spatial descriptions). Agent was making snap judgments without properly using the validation tool output.
+
+**Symptoms**:
+- "5 spaces" classified as stuck (confidence 0.8)
+- Agent reasoning: "response does not indicate understanding"
+- Expected: scaffold_progress (correct answer)
+
+**Fix**: Updated AI Agent system message (line 226 in workflow-production-ready.json) with:
+- Explicit evaluation rules for different answer types (numeric, directional, position)
+- Concrete examples showing "5", "5 spaces", "five" all mean the same
+- Default to "scaffold_progress" if answer shows ANY relevant understanding
+
+**Testing**: Verified with number line navigation examples
+
+**Date**: October 13, 2025
+
+---
+
+### Bug #5: Teach-Back Mode Hijacking by Scaffolding Re-Initiation
+
+**Issue**: After student answered correctly and gave a weak explanation ("I just followed your lead"), the system:
+1. Classified it as "stuck" instead of "teach_back_explanation"
+2. Re-initiated scaffolding while teach-back was still active
+3. Both `scaffolding.active` and `teach_back.active` became true
+4. "Response: Stuck" followed scaffolding path instead of teach-back completion path
+
+**Root Causes**:
+1. "LLM: Extract Intent & Value" wasn't recognizing weak explanations as teach_back_explanation
+2. State transition logic allowed scaffolding to be initiated when teach-back was active (missing guard condition)
+
+**Symptoms**:
+- Dual-state conflict: both scaffolding and teach-back active simultaneously
+- Weak student explanations misclassified as "stuck"
+- Teach-back flow interrupted by scaffolding re-initiation
+
+**Fixes**:
+1. Updated "LLM: Extract Intent & Value" prompt (line 137 in workflow-production-ready.json) to explicitly recognize weak explanations:
+   - Added examples: "I just followed your lead", "you helped me", "I guessed"
+   - Emphasized ANY explanation during teach-back should be classified as teach_back_explanation
+2. Added guard condition `&& !contextData.is_teach_back_active` to prevent scaffolding initiation during teach-back (line 755)
+
+**Testing**: Verified with conversation flow:
+- "I don't know" → stuck (scaffolding initiates)
+- "3 spaces to the left of zero" → scaffold_progress
+- "5 spaces" → scaffold_progress (Bug 4 fix)
+- "It means I only have 2" → correct
+- "I just followed your lead" → teach_back_explanation (Bug 5 fix), wraps up positively
+
+**Date**: October 13, 2025
+
+---
+
 ## Scope Changes
 
 ### Added: Two-Stage Triage
