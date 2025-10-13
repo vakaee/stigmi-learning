@@ -37,7 +37,7 @@ Response intensity adapts based on attempt count:
 - **Attempt 3+**: Direct teaching with worked examples
 
 ### Session Memory
-Sessions maintain last 5 conversation turns for context, track attempt count per problem, and expire after 30 minutes. When problem ID changes, attempt count resets but conversation history continues.
+Sessions maintain last 15 conversation turns for context, track attempt count per problem, and expire after 30 minutes. When problem ID changes, attempt count resets but conversation history continues (keeping last 3 turns for continuity).
 
 ## Project Structure
 
@@ -79,7 +79,7 @@ Sessions maintain last 5 conversation turns for context, track attempt count per
     id: string,           // Problem identifier
     attempt_count: number // Resets when problem.id changes
   },
-  recent_turns: [],       // Last 5 turns (trimmed automatically)
+  recent_turns: [],       // Last 15 turns (trimmed automatically)
   concepts_taught: []
 }
 ```
@@ -215,8 +215,8 @@ Cannot determine answer quality without first verifying the answer, but cannot v
 ### Why 20% Threshold for "Close"
 Catches calculation errors (off-by-one, rounding) without conflating them with conceptual errors. Extensively tested with exemplar questions.
 
-### Why Last 5 Turns Only
-Balance between context (for natural conversation) and token cost/latency. More than 5 turns rarely adds value for elementary math problems.
+### Why Last 15 Turns
+Balance between context (for natural conversation) and token cost/latency. 15 turns provides sufficient context for extended scaffolding sequences while keeping token costs manageable. More than 15 turns rarely adds value for elementary math problems - students needing more attempts should be escalated to human tutors.
 
 ### Why GPT-4o-mini
 Meets latency requirements (~300ms for triage) and cost targets (~$0.0003 per turn) while maintaining classification accuracy. GPT-4 is overkill for this use case.

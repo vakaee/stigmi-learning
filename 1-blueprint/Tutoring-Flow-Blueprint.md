@@ -43,7 +43,7 @@ This document specifies a complete adaptive AI tutoring system that transforms s
 - **Actual Performance**: ~1.5 seconds average
 - **Cost**: ~$0.0003 per turn
 - **Categories**: 6 distinct teaching strategies
-- **Memory Window**: Last 5 conversation turns
+- **Memory Window**: Last 15 conversation turns
 
 ---
 
@@ -600,7 +600,7 @@ Maintain conversation context across multiple turns to enable:
     started_at: "2025-10-08T10:30:00Z"
   },
 
-  // Last 5 turns (for LLM context)
+  // Last 15 turns (for LLM context)
   recent_turns: [
     {
       turn_number: 1,
@@ -626,7 +626,7 @@ Maintain conversation context across multiple turns to enable:
       tutor_response: "Right! Starting at -3, which way do we move when adding?",
       latency_ms: 1220
     }
-    // ... up to 5 most recent turns
+    // ... up to 15 most recent turns
   ],
 
   // Concepts taught (for tracking)
@@ -693,7 +693,7 @@ const session = JSON.parse(fs.readFileSync(`sessions/${session_id}.json`));
 
 **Problem**: Sending full conversation history to LLM is expensive and slow.
 
-**Solution**: Keep only last 5 turns in LLM context.
+**Solution**: Keep only last 15 turns in LLM context.
 
 **Formatting for LLM**:
 ```
@@ -731,9 +731,9 @@ function updateSession(session, newTurn, currentProblemId) {
   // Add turn to recent history
   session.recent_turns.push(newTurn);
 
-  // Trim to last 5 turns
-  if (session.recent_turns.length > 5) {
-    session.recent_turns = session.recent_turns.slice(-5);
+  // Trim to last 15 turns
+  if (session.recent_turns.length > 15) {
+    session.recent_turns = session.recent_turns.slice(-15);
   }
 
   // Update metadata

@@ -65,7 +65,7 @@ See the working implementation:
 - **Attempt 3+**: Direct teaching with worked examples
 
 ### Session Memory
-- Maintains last 5 conversation turns
+- Maintains last 15 conversation turns
 - Tracks attempt count per problem
 - Detects error patterns
 - 30-minute session TTL
