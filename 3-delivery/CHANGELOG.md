@@ -538,6 +538,158 @@ This ensures the corrupted state is cleaned up before being saved back to Redis,
 
 ---
 
+### Bug #9: Scaffold Progress Repeats Question Instead of Recognizing Completion
+
+**Issue**: When student correctly answered the final scaffolding question (which happened to be the main problem's answer), the system repeated the exact same scaffolding question instead of recognizing they had solved the problem.
+
+**Conversation example**:
+- Tutor: "Exactly! Now, if you start at -3 and move 5 spaces to the right, can you tell me what number you'll land on?"
+- Student: "2" (CORRECT - this IS the answer to -3 + 5)
+- System: "Great! Now, if you start at -3 and move 5 spaces to the right, what number do you land on?" (REPEATED SAME QUESTION)
+
+**Root Cause**: Response: Scaffold Progress node (line 728 in workflow-production-ready.json) didn't detect when the scaffolding answer equaled the main problem's correct answer. The prompt had logic to:
+- Ask next scaffolding step if "this was an early scaffolding step"
+- Guide back to main problem if "this was the final scaffolding step"
+
+But it didn't have logic to check if the student's current answer **IS** the main problem's answer (meaning they just solved it through scaffolding).
+
+**Symptoms**:
+- Scaffolding question repeated verbatim when student gives final answer
+- No recognition that problem is solved
+- Frustrating user experience (feels stuck in loop)
+- System doesn't celebrate completion
+
+**Fix**: Updated Response: Scaffold Progress prompt (line 728) to add detection logic:
+
+**New Logic**:
+```jinja2
+FIRST: Check if the student just solved the main problem through scaffolding:
+{% if $json.message == $json.current_problem.correct_answer %}
+{# Student's scaffolding answer IS the main problem's answer - they just solved it! #}
+- Celebrate enthusiastically ("You just solved it!", "That's the answer!")
+- State the solution explicitly: "{{$json.current_problem.text}} = {{$json.message}}"
+- Acknowledge the scaffolding helped
+- 2-3 sentences total
+- Excited, celebratory tone
+
+{% else %}
+{# Student answered a scaffolding sub-step correctly, but hasn't reached the main answer yet #}
+- Continue with existing scaffolding progression logic
+{% endif %}
+```
+
+**Benefits**:
+- Recognizes when scaffolding journey is complete
+- Celebrates achievement immediately
+- Natural transition from scaffolding to completion
+- No repeated questions
+- Better pedagogical experience
+
+**Testing**: Should verify with:
+- Scaffolding that ends with "what number do you land on?" → "2" → Celebration (Bug 9 fix)
+- Scaffolding that ends with sub-step → "3 spaces" → Continue scaffolding (existing behavior)
+- Scaffolding with intermediate correct answer → Proper progression
+
+**Date**: October 13, 2025
+
+---
+
+### Bug #10: False Teach-Back Activation from Heuristic Detection
+
+**Issue**: When tutor asked "Can you explain what you think -3 + 5 means?" (a clarifying/conceptual question), student responded "I don't know", and the system incorrectly responded with teach-back completion message: "That's okay! The important thing is you got the right answer. Great job working through it!"
+
+The student had NEVER answered correctly, so celebrating "you got the right answer" was completely inappropriate.
+
+**Conversation context**:
+- Problem: What is -3 + 5? (correct answer: 2)
+- Student: "-1" (wrong)
+- Tutor: "Can you explain what you think -3 + 5 means?" (clarifying question)
+- Student: "I don't know"
+- Expected: Initiate scaffolding (break down the problem)
+- Actual: "That's okay! The important thing is you got the right answer." (teach-back completion)
+
+**Root Cause**: Prepare Agent Context node (line 208 in workflow-production-ready.json) had fallback heuristic detection for teach-back mode:
+
+```javascript
+// Fallback: Detect if we're in teach-back mode (if state not set)
+if (!teachBackState.active && lastTurnFromCurrentProblem && lastCategory === 'correct') {
+  const isTeachBackQuestion = (
+    lastTutorMessage.toLowerCase().includes('explain') ||
+    lastTutorMessage.toLowerCase().includes('how did you') ||
+    lastTutorMessage.toLowerCase().includes('walk me through') ||
+    lastTutorMessage.toLowerCase().includes('tell me how')
+  );
+
+  if (isTeachBackQuestion) {
+    teachBackState.active = true;
+    teachBackState.awaiting_explanation = true;
+  }
+}
+```
+
+**The problem**: This heuristic triggered `is_teach_back_active = true` whenever:
+1. Last message contained "explain"
+2. Last category was "correct"
+
+But the tutor's message "Can you explain what you think -3 + 5 means?" was NOT a teach-back question (student never answered correctly). It was a conceptual clarification question.
+
+**Why the heuristic exists**: It was meant as a fallback to detect teach-back mode if session state wasn't properly saved. However, it created false positives.
+
+**Symptoms**:
+- Teach-back completion message when student never answered correctly
+- Response: Stuck node executing teach-back branch instead of scaffolding branch
+- Confusing celebration of non-existent success
+- Poor pedagogical experience
+
+**Fix**: Removed the fallback heuristic entirely. Teach-back state is now ONLY managed explicitly by the Update Session node after Response: Correct executes.
+
+**Removed code** (line 208):
+```javascript
+// REMOVED fallback heuristic detection for teach-back mode
+// Teach-back state is now ONLY managed by Update Session node after Response: Correct
+// This prevents false positives where "explain" appears in scaffolding/clarification questions
+```
+
+**Why this is the correct fix**:
+- Teach-back should ONLY be activated after Response: Correct node executes (explicit state management)
+- Heuristic detection creates false positives (word "explain" appears in many contexts)
+- Session state from Update Session is the single source of truth
+- If session state is lost (Redis expires), system should NOT guess - it should start fresh
+
+**Benefits**:
+- Eliminates false teach-back activation
+- Simpler state management (single source of truth)
+- No confusion between conceptual questions and teach-back questions
+- Better pedagogical experience (appropriate responses to student state)
+
+**Additional Fix - Load Session Defensive Reset**: After removing the heuristic, discovered that corrupted Redis state could still cause false teach-back activation on first turn. Added defensive reset in Load Session node (line 301 in workflow-production-ready.json):
+
+```javascript
+// DEFENSIVE: Force reset teach-back on first turn (prevent Redis corruption)
+if (session.recent_turns.length === 0) {
+  session.current_problem.teach_back = { active: false, awaiting_explanation: false };
+}
+```
+
+This ensures that even if Redis has corrupted state from a previous session, it gets cleaned before any logic executes. Combined with the Prepare Agent Context defensive guard (line 208), this provides two layers of protection:
+1. Load Session: Prevents corrupted state from being loaded
+2. Prepare Agent Context: Guards against any state that slips through
+
+**Why both layers**:
+- Load Session reset happens at the data layer (closest to Redis)
+- Prepare Agent Context reset happens at the logic layer (before use)
+- Defense-in-depth prevents false teach-back activation from any source
+
+**Testing**: Should verify with:
+- "Can you explain what you think -3 + 5 means?" + "I don't know" → Scaffolding (Bug 10 fix)
+- "I don't know" on first turn (no previous conversation) → Never activates teach-back (Load Session fix)
+- Correct answer → Teach-back question → "I don't know" → Graceful completion (existing behavior)
+- Correct answer → Teach-back question → Valid explanation → Celebration (existing behavior)
+
+**Date**: October 13, 2025
+
+---
+
 ## Scope Changes
 
 ### Added: Two-Stage Triage
