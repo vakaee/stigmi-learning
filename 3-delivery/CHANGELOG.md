@@ -377,6 +377,167 @@ Attempt 3+: Teach (direct instruction + worked example)
 
 ---
 
+### Bug #6: Scaffolding Response Misclassified as Main Problem Attempt
+
+**Issue**: Student response "it's 5 positions to the right of 0" to scaffolding question was incorrectly classified as "wrong_operation" (main problem attempt with answer 5) instead of "scaffold_progress" (correct scaffolding response).
+
+**Conversation context**:
+- Scaffolding question: "can you find the position of 5 on the number line? How many spaces to the right of zero is it?"
+- Student response: "it's 5 positions to the right of 0"
+- Expected: scaffold_progress (correct answer to scaffolding question)
+- Actual: wrong_operation (treated as main problem attempt: 5 vs correct answer 2)
+
+**Root Cause**: AI Agent used pattern matching ("I think it's", "it's X") as primary indicator of main problem attempt, causing it to misclassify descriptive scaffolding responses that happened to contain numbers. Agent didn't perform semantic analysis to check if response addressed the scaffolding question.
+
+**Symptoms**:
+- Descriptive scaffolding answers with numbers classified as main problem attempts
+- Pattern matching prioritized over semantic understanding
+- System couldn't adapt to different types of scaffolding questions (number line, fractions, geometry, etc.)
+
+**Fix**: Updated AI Agent system message (line 226 in workflow-production-ready.json) with semantic-first detection strategy:
+
+**New Decision Process**:
+1. STEP 1: Always call validate_scaffolding tool first (provides scaffolding question context)
+2. STEP 2: Ask "Does the student's response semantically address the scaffolding question?"
+   - SCAFFOLDING RESPONSE indicators: Response directly answers what scaffolding question asked, contains descriptive/contextual language
+   - MAIN PROBLEM ATTEMPT indicators: Standalone numeric answer with no context, explicit phrases like "the answer is [number]"
+3. STEP 3: Route to appropriate tool based on semantic analysis
+
+**Examples added to prompt**:
+- "it's 5 positions to the right of 0" → SCAFFOLDING RESPONSE (describes position)
+- "5 spaces to the right" → SCAFFOLDING RESPONSE (answers position question)
+- "the answer is 5" → MAIN PROBLEM ATTEMPT (explicit answer phrase)
+- "3/4" (when scaffolding asks "what is 1/2 + 1/4?") → SCAFFOLDING RESPONSE
+
+**Benefits of semantic approach**:
+- Adapts to ANY type of scaffolding question (no hardcoded keywords)
+- Scales across different problem domains (arithmetic, fractions, geometry, algebra)
+- Uses LLM's semantic understanding instead of brittle pattern matching
+- Checks if response addresses the specific scaffolding question asked
+
+**Testing**: Should verify with:
+- "it's 5 positions to the right of 0" → scaffold_progress (Bug 6 fix)
+- "three fourths" (for fraction scaffolding) → scaffold_progress
+- "negative 3" (for concept scaffolding) → scaffold_progress
+- "the answer is 2" (during scaffolding) → correct (main problem attempt)
+
+**Date**: October 13, 2025
+
+---
+
+### Bug #7: "I don't know" During Teach-Back Treated as Valid Explanation
+
+**Issue**: When teach-back mode was active and student said "I don't know", the system responded: "I love how you explained that! Let's think about it this way: when you add a positive number like 5 to a negative number like -3, you can think of it as starting at -3 and moving up 5 steps. You've got this! Ready for the next challenge?"
+
+This was a ridiculous response celebrating a non-explanation as if it were a valid teach-back explanation.
+
+**Conversation context**:
+- Student answered main problem correctly (answer: 2)
+- System asked for explanation (teach-back mode activated)
+- Student responded: "I don't know"
+- Expected: Graceful acceptance ("That's okay! The important thing is you got the right answer.")
+- Actual: False celebration ("I love how you explained that!")
+
+**Root Cause**: Response: Stuck node (line 656 in workflow-production-ready.json) had a teach_back branch that unconditionally celebrated ANY response when teach-back was active. The prompt said "Acknowledge their explanation warmly" without checking if the explanation was actually meaningful.
+
+**Symptoms**:
+- "I don't know", "idk", "not sure" treated as valid explanations
+- Overly celebratory responses to weak/no explanations
+- Disconnect between student's response and tutor's reaction
+- Poor pedagogical experience (false praise)
+
+**Fix**: Updated Response: Stuck node's teach_back branch prompt to:
+
+**New Logic**:
+1. FIRST: Determine if explanation is meaningful
+   - WEAK explanations: "I don't know", "idk", "not sure", "I can't explain", "I just guessed", vague responses
+   - VALID explanations: Any actual reasoning, steps, or thought process
+2. For WEAK explanations:
+   - Accept gracefully without false celebration
+   - Examples: "That's okay! The important thing is you got the right answer.", "No worries! You solved it, and that's what matters."
+   - Warm, supportive tone (but NOT overly celebratory)
+3. For VALID explanations:
+   - Keep existing celebratory behavior
+   - "I love how you explained that!", "Great reasoning!"
+
+**Benefits**:
+- Authentic responses that match student's actual input
+- Better pedagogical experience (no false praise)
+- Maintains supportive tone while being honest
+- Completes teach-back gracefully even when student can't explain
+
+**Testing**: Should verify with:
+- "I don't know" → Graceful acceptance (Bug 7 fix)
+- "idk" → Graceful acceptance
+- "I added -3 and 5" → Celebration (valid explanation)
+- "I just guessed" → Graceful acceptance (weak explanation)
+
+**UPDATE - Root Cause Discovery**: After further investigation, discovered the real issue was session state corruption. On first turn with "I don't know", the system was somehow reading `teach_back.active: true` from the session (likely from a previous problematic save to Redis).
+
+**Additional Fix Applied** (line 208 in Prepare Agent Context node):
+- Changed defensive guard to overwrite BOTH the local `teachBackState` variable AND the session object itself
+- This ensures that even if Redis has corrupted state (`teach_back: {active: true}`), it gets cleaned on first turn
+- Forces `teach_back = {active: false, awaiting_explanation: false}` when `recentTurns.length === 0`
+
+**Before**:
+```javascript
+// Only fixed local variable
+if (recentTurns.length === 0) {
+  teachBackState.active = false;
+  teachBackState.awaiting_explanation = false;
+}
+```
+
+**After**:
+```javascript
+// Fixes both local variable AND session object
+if (recentTurns.length === 0) {
+  teachBackState = { active: false, awaiting_explanation: false };
+  if (session.current_problem?.teach_back) {
+    session.current_problem.teach_back.active = false;
+    session.current_problem.teach_back.awaiting_explanation = false;
+  }
+}
+```
+
+This ensures the corrupted state is cleaned up before being saved back to Redis, preventing the bug from persisting across requests.
+
+**Date**: October 13, 2025
+
+---
+
+### Regression #1: Today's Commit Introduced Teach-Back Misclassification
+
+**Issue**: Commit 72f4401 ("fix: scaffolding validation and teach-back state management") from October 13, 2025 at 12:48 PM introduced a regression where "I don't know" on the first turn was being treated as teach-back explanation, producing ridiculous celebration responses.
+
+**What the commit did**:
+- Added examples to Stage 1 LLM ("LLM: Extract Intent & Value" node, line 134) teaching it to recognize weak explanations as teach_back_explanation
+- Examples included: "I don't know how I got it" → teach_back_explanation
+
+**Why this broke things**:
+- Stage 1 LLM now classifies "I don't know" as teach_back_explanation when `is_teach_back_active = true`
+- If Redis has corrupted state (`teach_back.active: true` on first turn), Stage 1 misclassifies "I don't know" as teach_back instead of stuck
+- This caused Bug #7 to manifest even with the defensive guard in place
+
+**Root architectural issue**: Stage 1 LLM should NOT handle nuanced teach-back logic. Its only job is routing based on state flags. Handling weak vs valid explanations is Stage 2/Response node's responsibility.
+
+**Fix Applied**: Reverted the teach-back examples from Stage 1 LLM prompt (line 134):
+- **Before**: "Even if explanation is weak, vague, or just 'I followed your lead'... this is STILL a teach-back explanation. EXAMPLES: 'I don't know how I got it' → teach_back_explanation"
+- **After**: "Student is explaining their reasoning. Return: teach_back_explanation"
+- Kept Bug #6 and Bug #7 fixes intact (semantic-first detection, defensive guard, weak explanation handling)
+
+**Why this is the correct fix**:
+- Stage 1's only job: Route based on state flags (is_answer, is_teach_back_active, is_scaffolding_active)
+- Stage 2/Response nodes handle nuance (weak vs valid explanations, semantic analysis)
+- Defensive guard (Bug #7 fix, line 208) ensures state is never corrupted on first turn
+- Response: Stuck node (Bug #7 fix, line 656) handles weak explanations appropriately
+
+**Lesson learned**: Don't teach Stage 1 LLM to handle edge cases. Keep it simple (routing), push complexity to specialized nodes.
+
+**Date**: October 13, 2025
+
+---
+
 ## Scope Changes
 
 ### Added: Two-Stage Triage
