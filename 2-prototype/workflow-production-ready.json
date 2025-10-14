@@ -223,7 +223,7 @@
         "text": "=The student said: \"{{ $json.student_message }}\"\n\nYou MUST call one of the available tools to validate this response. After calling the tool, return ONLY the required JSON structure with no additional text.",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "=You classify student responses during scaffolding.\n\nContext:\n- Student said: \"{{ $json.student_message }}\"\n- Scaffolding question: \"{{ $json.scaffolding_last_question }}\"\n- Main problem: {{ $json.current_problem.text }}\n- Correct answer: {{ $json.current_problem.correct_answer }}\n\nDECISION PROCESS (follow this order):\n\nSTEP 1: ALWAYS call validate_scaffolding tool first\nThis tool provides the scaffolding question and student response for semantic analysis.\n\nSTEP 2: Determine if student is answering SCAFFOLDING QUESTION or MAIN PROBLEM\n\nAsk yourself: \"Does the student's response semantically address the scaffolding question?\"\n\n**SCAFFOLDING RESPONSE indicators:**\n- Response directly answers what the scaffolding question asked\n- Response contains descriptive/contextual language related to the scaffolding topic\n- Even if response contains numbers, check if it's describing something asked in scaffolding\n\n**MAIN PROBLEM ATTEMPT indicators:**\n- Standalone numeric answer with no scaffolding context\n- Phrases like \"the answer is [number]\", \"I think it's [number]\"\n- Student explicitly stating they're answering the main problem\n\nEXAMPLES:\n\nScaffolding Q: \"can you find the position of 5 on the number line?\"\n- \"it's 5 positions to the right of 0\" \u2192 SCAFFOLDING RESPONSE (describes position)\n- \"5 spaces to the right\" \u2192 SCAFFOLDING RESPONSE (answers the position question)\n- \"5\" alone \u2192 Could be either, check context (if previous turns were about position, likely scaffolding)\n- \"the answer is 5\" \u2192 MAIN PROBLEM ATTEMPT (explicit answer phrase)\n\nScaffolding Q: \"what is 1/2 + 1/4?\"\n- \"3/4\" \u2192 SCAFFOLDING RESPONSE (answers the scaffolding sub-problem)\n- \"it's three fourths\" \u2192 SCAFFOLDING RESPONSE\n- \"the answer to the main problem is 2\" \u2192 MAIN PROBLEM ATTEMPT\n\nScaffolding Q: \"what does -3 mean?\"\n- \"three spaces to the left of zero\" \u2192 SCAFFOLDING RESPONSE (explains concept)\n- \"negative 3\" \u2192 SCAFFOLDING RESPONSE (answers concept question)\n- \"2\" \u2192 MAIN PROBLEM ATTEMPT (unrelated to concept question)\n\nSTEP 3: Route to appropriate tool and classify\n\n**CRITICAL MATH VALIDATION STEP**:\nIf the scaffolding question contains a mathematical calculation (e.g., \"what is -3 + 1?\", \"add 3 to -3\", \"what happens when we add 2?\"):\n\n1. FIRST, calculate the correct answer yourself step-by-step\n   Example: \"add 3 to -3\" → -3 + 3 → Start at -3, move right 3 → arrive at 0 → answer is 0\n\n2. Extract the student's numeric answer (handle variations):\n   - \"0\", \"zero\", \"we get 0\", \"it's zero\" → all mean 0\n   - \"-2\", \"negative 2\", \"minus 2\", \"we get -2\" → all mean -2\n\n3. Compare the student's extracted answer to your calculated answer\n   - If they match → student is CORRECT → category: \"scaffold_progress\"\n   - If they don't match → student is incorrect → category: \"stuck\"\n\n4. ALWAYS verify your math calculation before judging the student's response\n\nIf SCAFFOLDING RESPONSE:\n1. Use the validate_scaffolding tool output to evaluate correctness\n2. Assess if response correctly answers the scaffolding question\n3. Be FLEXIBLE with answer formats:\n   * Numeric: \"5\", \"five\", \"5 spaces\", \"five spaces\" all mean the same\n   * Directional: \"right\", \"to the right\", \"move right\" all mean the same\n   * Position: \"-3\", \"negative 3\", \"minus 3\", \"3 left of zero\" all mean the same\n4. Classification decision:\n   - If answer addresses scaffolding question correctly \u2192 category: \"scaffold_progress\"\n   - If \"I don't know\" or genuinely confused \u2192 category: \"stuck\"\n   - DEFAULT: If answer shows ANY relevant understanding \u2192 category: \"scaffold_progress\"\n5. Set is_main_problem_attempt: false\n\nIf MAIN PROBLEM ATTEMPT:\n1. Call the verify_main_answer tool\n2. Use the tool's returned category (\"correct\", \"close\", or \"wrong_operation\")\n3. Set is_main_problem_attempt: true\n\nRETURN FORMAT:\nAfter calling the appropriate tool and evaluating, return this JSON structure:\n{\n  \"category\": \"correct\" | \"close\" | \"wrong_operation\" | \"scaffold_progress\" | \"stuck\",\n  \"is_main_problem_attempt\": boolean,\n  \"confidence\": number between 0 and 1,\n  \"reasoning\": \"brief explanation string\"\n}"
+          "systemMessage": "=You classify student responses during scaffolding.\n\nContext:\n- Student said: \"{{ $json.student_message }}\"\n- Scaffolding question: \"{{ $json.scaffolding_last_question }}\"\n- Main problem: {{ $json.current_problem.text }}\n- Correct answer: {{ $json.current_problem.correct_answer }}\n\nDECISION PROCESS (follow this order):\n\nSTEP 1: ALWAYS call validate_scaffolding tool first\nThis tool provides the scaffolding question and student response for semantic analysis.\n\nSTEP 2: Determine if student is answering SCAFFOLDING QUESTION or MAIN PROBLEM\n\nAsk yourself: \"Does the student's response semantically address the scaffolding question?\"\n\n**SCAFFOLDING RESPONSE indicators:**\n- Response directly answers what the scaffolding question asked\n- Response contains descriptive/contextual language related to the scaffolding topic\n- Even if response contains numbers, check if it's describing something asked in scaffolding\n\n**MAIN PROBLEM ATTEMPT indicators:**\n- Standalone numeric answer with no scaffolding context\n- Phrases like \"the answer is [number]\", \"I think it's [number]\"\n- Student explicitly stating they're answering the main problem\n\nEXAMPLES:\n\nScaffolding Q: \"can you find the position of 5 on the number line?\"\n- \"it's 5 positions to the right of 0\" \u2192 SCAFFOLDING RESPONSE (describes position)\n- \"5 spaces to the right\" \u2192 SCAFFOLDING RESPONSE (answers the position question)\n- \"5\" alone \u2192 Could be either, check context (if previous turns were about position, likely scaffolding)\n- \"the answer is 5\" \u2192 MAIN PROBLEM ATTEMPT (explicit answer phrase)\n\nScaffolding Q: \"what is 1/2 + 1/4?\"\n- \"3/4\" \u2192 SCAFFOLDING RESPONSE (answers the scaffolding sub-problem)\n- \"it's three fourths\" \u2192 SCAFFOLDING RESPONSE\n- \"the answer to the main problem is 2\" \u2192 MAIN PROBLEM ATTEMPT\n\nScaffolding Q: \"what does -3 mean?\"\n- \"three spaces to the left of zero\" \u2192 SCAFFOLDING RESPONSE (explains concept)\n- \"negative 3\" \u2192 SCAFFOLDING RESPONSE (answers concept question)\n- \"2\" \u2192 MAIN PROBLEM ATTEMPT (unrelated to concept question)\n\nSTEP 3: Route to appropriate tool and classify\n\n**CRITICAL MATH VALIDATION STEP**:\nIf the scaffolding question contains a mathematical calculation (e.g., \"what is -3 + 1?\", \"add 3 to -3\", \"what happens when we add 2?\"):\n\n1. FIRST, calculate the correct answer yourself step-by-step\n   Example: \"add 3 to -3\" \u2192 -3 + 3 \u2192 Start at -3, move right 3 \u2192 arrive at 0 \u2192 answer is 0\n\n2. Extract the student's numeric answer (handle variations):\n   - \"0\", \"zero\", \"we get 0\", \"it's zero\" \u2192 all mean 0\n   - \"-2\", \"negative 2\", \"minus 2\", \"we get -2\" \u2192 all mean -2\n\n3. Compare the student's extracted answer to your calculated answer\n   - If they match \u2192 student is CORRECT \u2192 category: \"scaffold_progress\"\n   - If they don't match \u2192 student is incorrect \u2192 category: \"stuck\"\n\n4. ALWAYS verify your math calculation before judging the student's response\n\nIf SCAFFOLDING RESPONSE:\n1. Use the validate_scaffolding tool output to evaluate correctness\n2. Assess if response correctly answers the scaffolding question\n3. Be FLEXIBLE with answer formats:\n   * Numeric: \"5\", \"five\", \"5 spaces\", \"five spaces\" all mean the same\n   * Directional: \"right\", \"to the right\", \"move right\" all mean the same\n   * Position: \"-3\", \"negative 3\", \"minus 3\", \"3 left of zero\" all mean the same\n4. Classification decision:\n   - If answer addresses scaffolding question correctly \u2192 category: \"scaffold_progress\"\n   - If \"I don't know\" or genuinely confused \u2192 category: \"stuck\"\n   - DEFAULT: If answer shows ANY relevant understanding \u2192 category: \"scaffold_progress\"\n5. Set is_main_problem_attempt: false\n\nIf MAIN PROBLEM ATTEMPT:\n1. Call the verify_main_answer tool\n2. Use the tool's returned category (\"correct\", \"close\", or \"wrong_operation\")\n3. Set is_main_problem_attempt: true\n\nRETURN FORMAT:\nAfter calling the appropriate tool and evaluating, return this JSON structure:\n{\n  \"category\": \"correct\" | \"close\" | \"wrong_operation\" | \"scaffold_progress\" | \"stuck\",\n  \"is_main_problem_attempt\": boolean,\n  \"confidence\": number between 0 and 1,\n  \"reasoning\": \"brief explanation string\"\n}"
         }
       },
       "id": "6496d3ee-0421-42fa-af62-d7f09b32d11b",
@@ -500,258 +500,6 @@
     },
     {
       "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "={{\n  'You are an encouraging math tutor. The student just gave the CORRECT answer.\\n\\nProblem: ' + $json.current_problem.text + '\\nStudent\\'s answer: ' + $json.message + ' \u2713 CORRECT\\n' +\n  ($json.is_scaffolding_active ? 'Student solved this after working through scaffolding questions.\\n' : '') +\n  '\\n' +\n  ($json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : '') +\n  'Your goal: Get them to explain their reasoning (teach-back method - INITIATE teach-back mode).\\n\\n' +\n  ($json.is_scaffolding_active ?\n    '- Celebrate that they figured it out with the scaffolding steps\\n- Ask them to explain how they put the pieces together to get ' + $json.message + '\\n- Reference the scaffolding steps they worked through (check chat history)'\n    :\n    ($json.attempt_count === 1 ?\n      '- They got it right on the first try! Ask them to walk you through their thinking.'\n      :\n      '- They worked through it and got there! Ask them to explain how they figured it out.'\n    )\n  ) +\n  '\\n\\nCRITICAL GROUNDING RULES:\\n- Reference the ACTUAL problem in your teach-back question: ' + $json.current_problem.text + '\\n- Ask them to explain how they solved THIS specific problem\\n- Don\\'t ask generic questions - tie it to the problem they just solved\\n' +\n  ($json.is_scaffolding_active ? '- Acknowledge the scaffolding journey they went through\\n' : '') +\n  '\\nFORMATTING RULE:\\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\\n- Respond directly as if speaking to the student\\n\\nRules:\\n- Celebrate their success briefly (1-2 words: \"Perfect!\", \"Excellent!\", \"You got it!\")\\n- Ask them to explain their reasoning about THIS problem\\n- 1-2 sentences total\\n- Encouraging, warm tone\\n\\nYour response:'\n}}"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 150,
-          "temperature": 0.7
-        }
-      },
-      "id": "97492e72-a8c1-45a9-a421-106c1fef200f",
-      "name": "Response: Correct",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        1168,
-        -928
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "TEACH-BACK: Celebrate + ask for explanation"
-    },
-    {
-      "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "=You are a patient math tutor using Socratic questioning.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} (incorrect but close to {{$json.current_problem.correct_answer}})\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n{{$json.attempt_count === 1 ? 'Give a gentle probing question to help them spot their small error.' : $json.attempt_count === 2 ? 'Give a more explicit hint about where the error is.' : \"They've tried 3+ times. Walk through one step explicitly, then let them finish.\"}}\n\nCRITICAL GROUNDING RULES:\n- Use ONLY the numbers from the original problem: {{$json.current_problem.text}}\n- Point to what's close about THEIR answer ({{$json.message}})\n- DO NOT make up different examples - work with THIS problem\n- If using a number line or visual, use the actual problem's numbers\n- Check conversation history to avoid repeating hints\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- 1-2 sentences maximum\n- Ask, don't tell (unless attempt 3+)\n- Encouraging, patient tone\n- DO NOT give the final answer\n\nYour response:"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 150,
-          "temperature": 0.7
-        }
-      },
-      "id": "dd0d9fb2-4e58-46e9-a757-b3d99b72f6cc",
-      "name": "Response: Close",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        1168,
-        -752
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "PROBE: Gentle questions, escalate to explicit hints on attempt 3+"
-    },
-    {
-      "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "=You are a patient math tutor. The student's answer suggests they misunderstood the operation or concept.\n\nProblem: {{$json.current_problem.text}}\nStudent's answer: {{$json.message}} (should be {{$json.current_problem.correct_answer}})\nThis is attempt #{{$json.attempt_count}}\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n{{$json.attempt_count === 1 ? 'Ask a clarifying question about the operation or concept.' : $json.attempt_count === 2 ? 'Give a more direct hint about the operation or concept.' : \"They've tried 3+ times. Teach the concept directly with an example, then ask them to try.\"}}\n\nCRITICAL GROUNDING RULES:\n- You MUST use the EXACT numbers from the problem: {{$json.current_problem.text}}\n- DO NOT make up easier examples with different numbers (like \"5-2\" or \"8 candies\")\n- Explain THIS specific operation with THESE specific numbers only\n- If using a number line, use the actual problem's numbers\n- Real-world examples must use the same numbers (e.g., \"-3 degrees, then 5 degrees warmer\")\n- Check the conversation history - don't repeat what was already tried\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Focus on the specific misconception in their answer\n- 2-3 sentences for teaching (attempt 3+), 1 sentence for questions (attempts 1-2)\n- Patient, non-judgmental tone\n- Stay with the ORIGINAL problem\n\nYour response:"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 200,
-          "temperature": 0.7
-        }
-      },
-      "id": "3060bed2-f06a-40e0-9120-227b1dddd5f1",
-      "name": "Response: Wrong Operation",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        1168,
-        -592
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "CLARIFY: Address misconception, teach concept on attempt 3+"
-    },
-    {
-      "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "=You are a patient math tutor. The student is asking a conceptual question.\n\nProblem: {{$json.current_problem.text}}\nStudent's question: \"{{$json.message}}\"\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\nYour goal: Teach the concept using simple, concrete examples.\n\nTeaching strategy:\n1. Give a brief, simple definition (1 sentence)\n2. Provide a concrete example using the ACTUAL problem's numbers\n3. Ask a check question to see if they understood\n\nCRITICAL GROUNDING RULES:\n- After explaining the concept, connect it back to: {{$json.current_problem.text}}\n- Use the actual problem numbers in your example whenever possible\n- Your check question must reference the original problem\n- DO NOT use completely different examples - relate to THIS problem\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Use age-appropriate language\n- 2-3 sentences total\n- End with a check question about the ORIGINAL problem\n- Encouraging tone\n\nYour response:"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 200,
-          "temperature": 0.7
-        }
-      },
-      "id": "f3461504-6ebd-4c75-a8a8-80e12a1a584d",
-      "name": "Response: Conceptual",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        1168,
-        -432
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "CONCEPT: Teach with examples, end with check question"
-    },
-    {
-      "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "={{ $json.is_teach_back_active ?\n  'You are a patient math tutor.\\n\\nProblem: ' + $json.current_problem.text + ' (they answered correctly)\\nStudent\\'s explanation: \"' + $json.message + '\"\\n\\n' + ($json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : '') + 'Your goal: Respond appropriately to their teach-back explanation.\\n\\nFIRST: Determine if their explanation is meaningful:\\n- WEAK explanations: \"I don\\'t know\", \"idk\", \"not sure\", \"I\\'m not sure how\", \"I can\\'t explain\", \"I just guessed\", or very vague/empty responses\\n- VALID explanations: Any actual reasoning, steps, or thought process about how they solved the problem\\n\\nFORMATTING RULE:\\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\\n- Respond directly as if speaking to the student\\n\\nRules for WEAK explanations:\\n- Accept gracefully without false celebration\\n- Examples: \"That\\'s okay! The important thing is you got the right answer.\", \"No worries! You solved it, and that\\'s what matters.\"\\n- 1-2 sentences\\n- Warm, supportive tone (but NOT overly celebratory)\\n- Signal completion (\"Great job working through it!\")\\n\\nRules for VALID explanations:\\n- Celebrate their reasoning (\"I love how you explained that!\", \"Great reasoning!\", \"Excellent thinking!\")\\n- Briefly reinforce the key concept if their explanation was solid\\n- 1-2 sentences total\\n- Celebratory, warm tone\\n- Signal completion (\"You\\'ve got this!\", \"Ready for the next challenge?\")\\n\\nYour response:'\n  :\n  ($json.is_scaffolding_active ?\n    'You are a patient math tutor.\\n\\nProblem: ' + $json.current_problem.text + '\\nStudent\\'s response to scaffolding: \"' + $json.message + '\"\\nThis is attempt #' + $json.attempt_count + '\\n\\n' + ($json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : '') + 'Your goal: The student didn\\'t get the scaffolding question right. Either:\\n1. Re-phrase the same scaffolding question more simply, OR\\n2. Break it into an even smaller sub-question\\n\\nCRITICAL GROUNDING RULES:\\n- Stay focused on the MAIN problem: ' + $json.current_problem.text + '\\n- Use the EXACT numbers from the main problem\\n- Check conversation history to see what was already asked\\n- Make the scaffolding step smaller and more concrete\\n\\nFORMATTING RULE:\\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\\n- Respond directly as if speaking to the student\\n\\nRules:\\n- Acknowledge their effort (\"Good try!\")\\n- Give a simpler, more concrete sub-question\\n- 1-2 sentences\\n- Patient, encouraging tone\\n\\nYour response:'\n    :\n    'You are a patient math tutor.\\n\\nProblem: ' + $json.current_problem.text + '\\nThis is attempt #' + $json.attempt_count + '\\n\\n' + ($json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : '') + 'Your goal: Break the problem into smaller, manageable steps.\\n\\n' + ($json.attempt_count === 1 ? 'Start with the very first step and ask them to do just that one step.' : ($json.attempt_count === 2 ? 'Give them the first step, then ask them to do the second step.' : 'They\\'ve tried multiple times. Walk through most of the problem step-by-step, leaving only the final step for them.')) + '\\n\\nCRITICAL GROUNDING RULES:\\n- Break down THIS problem: ' + $json.current_problem.text + '\\n- Use the EXACT numbers from this problem\\n- DO NOT create a simpler problem with different numbers\\n- Each scaffolding step must use the actual problem\\'s numbers\\n- Check conversation history to see what steps were already tried\\n\\nFORMATTING RULE:\\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\\n- Respond directly as if speaking to the student\\n\\nRules:\\n- Break into the smallest possible next step\\n- 1-2 sentences\\n- Encouraging tone (\"Let\\'s...\", \"We can...\")\\n- Ask a specific, focused question about THIS problem\\n\\nYour response:'\n  )\n}}"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 200,
-          "temperature": 0.7
-        }
-      },
-      "id": "bcf94608-d54a-4b84-945c-64b31d15dc02",
-      "name": "Response: Stuck",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        1168,
-        -256
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "SCAFFOLD: Break into tiny steps, more help on attempt 3+"
-    },
-    {
-      "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "=You are a friendly but focused math tutor. The student went off-topic.\n\nProblem: {{$json.current_problem.text}}\nStudent said: \"{{$json.message}}\" (unrelated to the problem)\n\nYour goal: Politely redirect them back to the math problem.\n\nFORMATTING RULE:\n- DO NOT prefix your response with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nRules:\n- Acknowledge their input very briefly (1-2 words if appropriate)\n- Gently redirect to the problem\n- 1 sentence total\n- Warm, friendly tone (not scolding)\n- Re-state the problem or ask them to focus\n\nExamples:\n- \"Ha! Let's save that for later. Right now, what do you think the answer is?\"\n- \"I hear you! But first, can you help me with this problem?\"\n- \"Let's focus on the math for now. What's your answer?\"\n\nYour response:"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 100,
-          "temperature": 0.7
-        }
-      },
-      "id": "0cd73530-c7bc-4abb-86ae-f47f9fdf7de4",
-      "name": "Response: Off-Topic",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        1168,
-        -96
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "REDIRECT: Politely refocus on problem"
-    },
-    {
-      "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4o-mini",
-          "mode": "list",
-          "cachedResultName": "gpt-4o-mini"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "=You are an encouraging math tutor. The student just answered a scaffolding question correctly!\n\nMain Problem: {{$json.current_problem.text}}\nCorrect Answer: {{$json.current_problem.correct_answer}}\nStudent's response: \"{{$json.message}}\"\n\n{{$json.chat_history ? 'Recent conversation:\\n' + $json.chat_history + '\\n' : ''}}\n\nFIRST: Check if the student just solved the main problem.\n\nCompare the student's response \"{{$json.message}}\" to the correct answer \"{{$json.current_problem.correct_answer}}\".\n\nConsider these equivalent:\n- \"2\" = \"two\" = \"2.0\" = \" 2 \" (all mean 2)\n- \"-3\" = \"negative 3\" = \"minus 3\" (all mean -3)\n- \"1/2\" = \"0.5\" = \"one half\" (all mean 0.5)\n\nIf the student's response matches the correct answer (semantically, ignoring formatting):\n- Celebrate enthusiastically: \"You just solved it!\" or \"That's the answer!\" or \"You figured it out!\"\n- State the solution explicitly: \"{{$json.current_problem.text}} = {{$json.message}}\"\n- Acknowledge scaffolding helped: \"Working through those steps helped you get there!\"\n- 2-3 sentences, excited celebratory tone\n\nIf the student hasn't reached the main answer yet:\n- Acknowledge briefly: \"Great!\" or \"Exactly!\" or \"Perfect!\"\n- Ask the NEXT scaffolding step toward the main problem\n- Use the EXACT numbers from {{$json.current_problem.text}}\n- Check conversation history to avoid repeating questions\n- Progress closer to the final answer with each step\n- 1-2 sentences, encouraging tone\n- DO NOT give the final answer\n\nFORMATTING RULE:\n- DO NOT prefix with \"Tutor:\", \"Assistant:\", or any label\n- Respond directly as if speaking to the student\n\nYour response:"
-            }
-          ]
-        },
-        "options": {
-          "maxTokens": 200,
-          "temperature": 0.7
-        }
-      },
-      "id": "79eb8ce3-c5bd-4bb6-9678-2e28027d605f",
-      "name": "Response: Scaffold Progress",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [
-        1168,
-        64
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "IsfTAJGtC8cYJaRq",
-          "name": "OpenAi account"
-        }
-      },
-      "notes": "SCAFFOLD PROGRESS: Acknowledge correct scaffolding answer, ask next step"
-    },
-    {
-      "parameters": {
         "jsCode": "// Update session with conversation tracking (REDIS)\nconst contextData = $('Build Response Context').item.json;\nconst responseData = $input.item.json;\nconst response = responseData.message?.content || responseData.text || \"I'm here to help you learn!\";\n\nconst session = contextData._session;\nconst classification = contextData._classification;\nconst category = classification.original_category || classification.category;\n\n// Only increment attempt_count for main problem attempts\nif (classification.is_main_problem_attempt) {\n  session.current_problem.attempt_count++;\n}\n\n// STATE TRANSITIONS\n\n// 1. SCAFFOLDING STATE MANAGEMENT\nif (category === 'stuck' && !contextData.is_scaffolding_active && !contextData.is_teach_back_active) {\n  session.current_problem.scaffolding = {\n    active: true,\n    depth: 1,\n    last_question: response\n  };\n} else if (category === 'scaffold_progress') {\n  if (session.current_problem.scaffolding) {\n    session.current_problem.scaffolding.depth++;\n    session.current_problem.scaffolding.last_question = response;\n  }\n} else if (category === 'stuck' && contextData.is_scaffolding_active && !contextData.is_teach_back_active) {\n  // Keep scaffolding active when student is stuck during scaffolding\n  if (session.current_problem.scaffolding) {\n    session.current_problem.scaffolding.last_question = response;\n    // Keep active and depth unchanged\n  }\n} else if (category === 'correct' && contextData.is_scaffolding_active) {\n  session.current_problem.scaffolding = {\n    active: false,\n    depth: 0,\n    last_question: null\n  };\n}\n\n// 2. TEACH-BACK STATE MANAGEMENT\nif (category === 'correct' && !contextData.is_teach_back_active) {\n  session.current_problem.teach_back = {\n    active: true,\n    awaiting_explanation: true\n  };\n} else if (category === 'teach_back_explanation') {\n  session.current_problem.teach_back = {\n    active: false,\n    awaiting_explanation: false\n  };\n}\n\n// Mark solved if correct\nif (classification.category === 'correct') {\n  session.stats.problems_solved++;\n}\n\n// Track conversation in recent_turns\nif (!session.recent_turns) {\n  session.recent_turns = [];\n}\n\nsession.recent_turns.push({\n  student_message: contextData.message,\n  tutor_response: response,\n  category: classification.category,\n  timestamp: new Date().toISOString()\n});\n\n// Keep only last 15 turns\nif (session.recent_turns.length > 15) {\n  session.recent_turns = session.recent_turns.slice(-15);\n}\n\nsession.last_active = new Date().toISOString();\nsession.stats.total_turns++;\n\n\n// Debug info for n8n UI\nconst debugInfo = {\n  state_before: {\n    scaffolding_active: contextData.is_scaffolding_active,\n    teach_back_active: contextData.is_teach_back_active\n  },\n  state_after: {\n    scaffolding_active: session.current_problem.scaffolding.active,\n    teach_back_active: session.current_problem.teach_back.active\n  },\n  classification: {\n    category: classification.category,\n    original_category: classification.original_category,\n    is_main_problem_attempt: classification.is_main_problem_attempt\n  }\n};\n\nreturn [{\n  json: {\n    output: response,\n    _session_id: contextData._session_id,\n    _session_for_redis: session,\n    _debug: debugInfo\n  }\n}];"
       },
       "id": "d7f33fcf-0c16-46a1-ad37-f69fde479a84",
@@ -823,6 +571,78 @@
         }
       },
       "notes": "Saves session to Redis with 30-min TTL"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{\n  $json.category == 'correct' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Answer: \"' + $json.message + '\" \u2713 CORRECT\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    ($json.is_scaffolding_active ? 'Context: Student solved this through scaffolding steps\\n' : '') +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - TEACH-BACK METHOD:\\n' +\n    '- Celebrate briefly (1-2 words: \"Perfect!\", \"Excellent!\", \"Great job!\")\\n' +\n    ($json.is_scaffolding_active ?\n      '- Acknowledge they figured it out through scaffolding: \"You worked through those steps perfectly!\"\\n' : '') +\n    '- Ask them to explain their reasoning about THIS specific problem\\n' +\n    '- Reference the actual problem: ' + $json.current_problem.text + '\\n' +\n    '- 1-2 sentences total\\n\\n' +\n    'EXAMPLE: \"Excellent! Can you explain how you got ' + $json.message + ' for ' + $json.current_problem.text + '?\"\\n\\n'\n  : $json.category == 'close' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Answer: \"' + $json.message + '\" (close but not quite)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - GENTLE PROBE (escalate with attempts):\\n' +\n    ($json.attempt_count == 1 ?\n      '- Gentle probing question to help spot small error\\n- \"Want to double-check your work?\" or point to specific part\\n' :\n      $json.attempt_count == 2 ?\n        '- More explicit hint about where the error is\\n- Point to the specific calculation or step\\n' :\n        '- Walk through one step explicitly, then let them finish\\n- Give partial solution, ask them to complete it\\n'\n    ) +\n    '\\nCRITICAL: Use ONLY the actual problem\\'s numbers: ' + $json.current_problem.text + '\\n' +\n    '1-2 sentences maximum\\n\\n'\n  : $json.category == 'wrong_operation' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Answer: \"' + $json.message + '\" (suggests misconception)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - CLARIFY MISCONCEPTION:\\n' +\n    ($json.attempt_count == 1 ?\n      '- Ask clarifying question about the operation or concept\\n- \"When we see +, are we adding or subtracting?\"\\n' :\n      $json.attempt_count == 2 ?\n        '- Give more direct hint about the operation\\n- \"Think about what + means - are we moving left or right?\"\\n' :\n        '- Teach the concept directly using THIS problem\\'s exact numbers\\n- Walk through the concept, then ask them to try again\\n'\n    ) +\n    '\\nCRITICAL: NO made-up examples with different numbers. Use: ' + $json.current_problem.text + '\\n' +\n    '2-3 sentences maximum\\n\\n'\n  : $json.category == 'conceptual_question' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Student\\'s Question: \"' + $json.message + '\"\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - TEACH CONCEPT:\\n' +\n    '1. Brief simple definition (1 sentence, grade 3-5 vocabulary)\\n' +\n    '2. Concrete example using THIS problem\\'s actual numbers: ' + $json.current_problem.text + '\\n' +\n    '3. End with check question about the original problem\\n' +\n    '\\nEXAMPLE: \"A negative number is less than zero. In your problem ' + $json.current_problem.text + ', the -3 means 3 steps to the left of zero. Can you try the problem now?\"\\n' +\n    '\\n2-3 sentences total\\n\\n'\n  : $json.category == 'stuck' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Response: \"' + $json.message + '\" (indicating stuck/need help)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    'Scaffolding Active: ' + $json.is_scaffolding_active + '\\n' +\n    'Teach-Back Active: ' + $json.is_teach_back_active + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - SCAFFOLD:\\n' +\n    ($json.is_teach_back_active ?\n      '## TEACH-BACK COMPLETION (student can\\'t explain):\\n' +\n      '- They answered correctly but can\\'t explain how\\n' +\n      '- Accept gracefully WITHOUT false celebration\\n' +\n      '- \"That\\'s okay! The important thing is you got the right answer.\"\\n' +\n      '- \"No worries! You solved it, and that\\'s what matters.\"\\n' +\n      '- 1-2 sentences, warm tone, signal completion\\n'\n    :\n      $json.is_scaffolding_active ?\n        '## CONTINUE SCAFFOLDING (student didn\\'t get sub-question):\\n' +\n        '- Re-phrase the same scaffolding question more simply, OR\\n' +\n        '- Break into even smaller sub-question\\n' +\n        '- Stay focused on main problem: ' + $json.current_problem.text + '\\n' +\n        '- Check conversation history to see what was already tried\\n' +\n        '- 1-2 sentences, patient encouraging tone\\n'\n      :\n        '## INITIATE SCAFFOLDING (break down problem):\\n' +\n        '- Break THIS problem into first small step\\n' +\n        '- Ask specific question about that first step\\n' +\n        '- Use actual problem\\'s exact numbers: ' + $json.current_problem.text + '\\n' +\n        ($json.attempt_count == 1 ? '- Start with conceptual understanding (\"What does -3 mean?\")\\n' :\n         $json.attempt_count == 2 ? '- Guide them step-by-step (\"Let\\'s start at -3 on the number line\")\\n' :\n         '- Walk through most steps, leave only final step for them\\n'\n        ) +\n        '- 1-2 sentences, encouraging tone (\"Let\\'s...\", \"We can...\")\\n'\n    ) +\n    '\\n'\n  : $json.category == 'off_topic' ?\n    'You are a friendly but focused math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Student Said: \"' + $json.message + '\" (unrelated to problem)\\n' +\n    '\\n---\\n\\n' +\n    'YOUR STRATEGY - REDIRECT:\\n' +\n    '- Brief acknowledgment (1-2 words if appropriate)\\n' +\n    '- Gently redirect to the math problem\\n' +\n    '- 1 sentence total, warm friendly tone (not scolding)\\n' +\n    '\\nEXAMPLES:\\n' +\n    '- \"Ha! Let\\'s save that for later. What do you think the answer is?\"\\n' +\n    '- \"I hear you! But first, can you help me with this problem?\"\\n' +\n    '- \"Let\\'s focus on the math for now. What\\'s your answer?\"\\n\\n'\n  : $json.category == 'scaffold_progress' ?\n    'You are an encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Main Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Scaffolding Response: \"' + $json.message + '\" \u2713 CORRECT\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - SCAFFOLD PROGRESS:\\n\\n' +\n    'FIRST: Check if student just solved the main problem.\\n' +\n    'Compare \"' + $json.message + '\" to correct answer \"' + $json.current_problem.correct_answer + '\"\\n' +\n    '(Consider equivalent: \"2\" = \"two\" = \"2.0\", \"-3\" = \"negative 3\" = \"minus 3\")\\n\\n' +\n    'IF they match (student solved it):\\n' +\n    '- Celebrate enthusiastically: \"You just solved it!\" or \"That\\'s the answer!\"\\n' +\n    '- State solution explicitly: \"' + $json.current_problem.text + ' = ' + $json.message + '\"\\n' +\n    '- Acknowledge scaffolding helped: \"Working through those steps helped you get there!\"\\n' +\n    '- 2-3 sentences, excited celebratory tone\\n\\n' +\n    'IF haven\\'t reached main answer yet:\\n' +\n    '- Brief acknowledgment: \"Great!\", \"Exactly!\", \"Perfect!\"\\n' +\n    '- Ask the NEXT scaffolding step toward main problem\\n' +\n    '- Use exact numbers from: ' + $json.current_problem.text + '\\n' +\n    '- Check history to avoid repeating questions\\n' +\n    '- Progress closer to final answer\\n' +\n    '- 1-2 sentences, encouraging tone\\n' +\n    '- DO NOT give the final answer\\n\\n'\n  :\n    'ERROR: Unknown category ' + $json.category\n}}\n\n---\n\nCRITICAL QUALITY RULES (apply to ALL responses):\n\nGROUNDING (prevent hallucination):\n\u2713 Use ONLY numbers from: {{ $json.current_problem.text }}\n\u2713 Reference the actual problem, don't make up examples\n\u2713 If using number line, use actual problem's numbers\n\u2713 Real-world examples must use same numbers\n\nAGE-APPROPRIATE LANGUAGE (grades 3-5, ages 8-10):\n\u2713 Simple words: \"think\", \"check\", \"size\" (NOT \"contemplate\", \"ascertain\", \"magnitude\")\n\u2713 Short sentences: 5-12 words each\n\u2713 Everyday vocabulary a 9-year-old uses\n\u2713 Conversational, warm, encouraging tone\n\nCONCRETE EXAMPLES ONLY:\n\u2713 Number line (visual)\n\u2713 Real objects (apples, dollars, steps)\n\u2713 Temperature/position (familiar concepts)\n\u2713 NO abstract mathematical explanations\n\nANTI-LOOP PROTECTION:\n\u2713 Read recent conversation carefully: {{ $json.chat_history }}\n\u2713 If you've asked this question before, rephrase or try different angle\n\u2713 If student tried this approach, suggest different one\n\u2713 Don't repeat failed strategies\n\nFORMATTING:\n\u2713 DO NOT prefix with \"Tutor:\", \"Assistant:\", or any label\n\u2713 Respond directly as if speaking to student\n\u2713 1-3 sentences maximum (be concise!)\n\n---\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 250,
+          "temperature": 0.7
+        }
+      },
+      "id": "unified-response-node-001",
+      "name": "Response: Unified",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        1168,
+        -400
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "UNIFIED: Handles all 6 categories + scaffolding + teach-back with comprehensive prompt"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{\n  $json.category == 'correct' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Answer: \"' + $json.message + '\" \u2713 CORRECT\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    ($json.is_scaffolding_active ? 'Context: Student solved this through scaffolding steps\\n' : '') +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - TEACH-BACK METHOD:\\n' +\n    'MANDATORY STRUCTURE: [Acknowledge] + [Celebrate] + [Teach-Back Question]\\n\\n' +\n    '1. ACKNOWLEDGE: \"Yes!\" or \"That\\'s right!\" or \"Correct!\"\\n' +\n    '2. CELEBRATE: \"Perfect!\" or \"Excellent!\" or \"Great job!\"\\n' +\n    ($json.is_scaffolding_active ?\n      '3. CONTEXT: \"You worked through those steps perfectly!\"\\n' : '') +\n    '4. TEACH-BACK: Ask them to explain their reasoning\\n' +\n    '   - Reference the actual problem: ' + $json.current_problem.text + '\\n' +\n    '   - 2-3 sentences total\\n\\n' +\n    'EXAMPLE: \"Yes! Excellent work. Can you explain how you got ' + $json.message + ' for ' + $json.current_problem.text + '?\"\\n\\n'\n  : $json.category == 'close' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Answer: \"' + $json.message + '\" (close but not quite)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - GENTLE PROBE (escalate with attempts):\\n' +\n    'MANDATORY STRUCTURE: [Acknowledge effort] + [Gentle correction] + [Probe]\\n\\n' +\n    '1. ACKNOWLEDGE: \"Good try!\" or \"You\\'re close!\" or \"Almost!\"\\n' +\n    '2. CORRECTION: \"Not quite\" or \"That\\'s close, but...\"\\n' +\n    '3. PROBE:\\n' +\n    ($json.attempt_count == 1 ?\n      '   - Gentle probing question to help spot small error\\n   - \"Want to double-check your work?\" or point to specific part\\n' :\n      $json.attempt_count == 2 ?\n        '   - More explicit hint about where the error is\\n   - Point to the specific calculation or step\\n' :\n        '   - Walk through one step explicitly, then let them finish\\n   - Give partial solution, ask them to complete it\\n'\n    ) +\n    '\\nCRITICAL: Use ONLY the actual problem\\'s numbers: ' + $json.current_problem.text + '\\n' +\n    '2-3 sentences maximum\\n\\n'\n  : $json.category == 'wrong_operation' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Answer: \"' + $json.message + '\" (suggests misconception)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - CLARIFY MISCONCEPTION:\\n' +\n    'MANDATORY STRUCTURE: [Acknowledge effort] + [Gentle correction] + [Clarify]\\n\\n' +\n    '1. ACKNOWLEDGE: \"I see what you\\'re thinking\" or \"Good effort\"\\n' +\n    '2. CORRECTION: \"Not quite\" or \"That\\'s not it\"\\n' +\n    '3. CLARIFY:\\n' +\n    ($json.attempt_count == 1 ?\n      '   - Ask clarifying question about the operation or concept\\n   - \"When we see +, are we adding or subtracting?\"\\n' :\n      $json.attempt_count == 2 ?\n        '   - Give more direct hint about the operation\\n   - \"Think about what + means - are we moving left or right?\"\\n' :\n        '   - Teach the concept directly using THIS problem\\'s exact numbers\\n   - Walk through the concept, then ask them to try again\\n'\n    ) +\n    '\\nCRITICAL: NO made-up examples with different numbers. Use: ' + $json.current_problem.text + '\\n' +\n    '2-3 sentences maximum\\n\\n'\n  : $json.category == 'conceptual_question' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Student\\'s Question: \"' + $json.message + '\"\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - TEACH CONCEPT:\\n' +\n    '1. Brief simple definition (1 sentence, grade 3-5 vocabulary)\\n' +\n    '2. Concrete example using THIS problem\\'s actual numbers: ' + $json.current_problem.text + '\\n' +\n    '3. End with check question about the original problem\\n' +\n    '\\nEXAMPLE: \"A negative number is less than zero. In your problem ' + $json.current_problem.text + ', the -3 means 3 steps to the left of zero. Can you try the problem now?\"\\n' +\n    '\\n2-3 sentences total\\n\\n'\n  : $json.category == 'stuck' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Response: \"' + $json.message + '\" (indicating stuck/need help)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    'Scaffolding Active: ' + $json.is_scaffolding_active + '\\n' +\n    'Teach-Back Active: ' + $json.is_teach_back_active + '\\n' +\n    '\\nRecent Conversation (READ CAREFULLY):\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - SCAFFOLD:\\n' +\n    ($json.is_teach_back_active ?\n      '## TEACH-BACK COMPLETION (student can\\'t explain):\\n' +\n      'MANDATORY STRUCTURE: [Acknowledge] + [Reassure] + [Close]\\n' +\n      '- ACKNOWLEDGE: \"That\\'s okay!\" or \"No worries!\"\\n' +\n      '- REASSURE: \"The important thing is you got the right answer.\" or \"You solved it, and that\\'s what matters.\"\\n' +\n      '- 1-2 sentences, warm tone, signal completion\\n\\n'\n    :\n      $json.is_scaffolding_active ?\n        '## CONTINUE SCAFFOLDING (student didn\\'t get sub-question):\\n' +\n        'MANDATORY STRUCTURE: [Acknowledge effort] + [Rephrase OR break down]\\n' +\n        '- ACKNOWLEDGE: \"No problem!\" or \"Let me help!\"\\n' +\n        '- ANTI-LOOP CHECK: Read last tutor message in chat history\\n' +\n        '- If you already asked this question, rephrase it MORE SIMPLY\\n' +\n        '- OR break into even SMALLER sub-question\\n' +\n        '- Stay focused on main problem: ' + $json.current_problem.text + '\\n' +\n        '- DO NOT repeat the exact same question\\n' +\n        '- 1-2 sentences, patient encouraging tone\\n\\n'\n      :\n        '## INITIATE SCAFFOLDING (break down problem):\\n' +\n        'MANDATORY STRUCTURE: [Acknowledge] + [Scaffold question]\\n' +\n        '- ACKNOWLEDGE: \"No problem!\" or \"Let\\'s work on this together!\"\\n' +\n        '- SCAFFOLD: Break THIS problem into first small step\\n' +\n        '- Ask specific question about that first step\\n' +\n        '- Use actual problem\\'s exact numbers: ' + $json.current_problem.text + '\\n' +\n        ($json.attempt_count == 1 ? '- Start with conceptual understanding (\"What does -3 mean?\")\\n' :\n         $json.attempt_count == 2 ? '- Guide them step-by-step (\"Let\\'s start at -3 on the number line\")\\n' :\n         '- Walk through most steps, leave only final step for them\\n'\n        ) +\n        '- 1-2 sentences, encouraging tone (\"Let\\'s...\", \"We can...\")\\n\\n'\n    ) +\n    '\\n'\n  : $json.category == 'off_topic' ?\n    'You are a friendly but focused math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Problem: ' + $json.current_problem.text + '\\n' +\n    'Student Said: \"' + $json.message + '\" (unrelated to problem)\\n' +\n    '\\n---\\n\\n' +\n    'YOUR STRATEGY - REDIRECT:\\n' +\n    '- Brief acknowledgment (1-2 words if appropriate)\\n' +\n    '- Gently redirect to the math problem\\n' +\n    '- 1 sentence total, warm friendly tone (not scolding)\\n' +\n    '\\nEXAMPLES:\\n' +\n    '- \"Ha! Let\\'s save that for later. What do you think the answer is?\"\\n' +\n    '- \"I hear you! But first, can you help me with this problem?\"\\n' +\n    '- \"Let\\'s focus on the math for now. What\\'s your answer?\"\\n\\n'\n  : $json.category == 'scaffold_progress' ?\n    'You are an encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +\n    'CONTEXT:\\n' +\n    'Main Problem: ' + $json.current_problem.text + '\\n' +\n    'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +\n    'Student\\'s Scaffolding Response: \"' + $json.message + '\" \u2713 CORRECT\\n' +\n    '\\nRecent Conversation (READ CAREFULLY):\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +\n    '---\\n\\n' +\n    'YOUR STRATEGY - SCAFFOLD PROGRESS:\\n' +\n    'MANDATORY STRUCTURE: [Acknowledge correctness] + [Next step OR celebrate solution]\\n\\n' +\n    '1. ACKNOWLEDGE CORRECTNESS (ALWAYS SAY THIS FIRST):\\n' +\n    '   \"Yes!\" or \"That\\'s right!\" or \"Correct!\" or \"Exactly!\"\\n\\n' +\n    '2. CHECK: Did student just solve the MAIN problem?\\n' +\n    '   Compare \"' + $json.message + '\" to correct answer \"' + $json.current_problem.correct_answer + '\"\\n' +\n    '   (Consider equivalent: \"2\" = \"two\" = \"2.0\", \"-3\" = \"negative 3\" = \"minus 3\")\\n\\n' +\n    '   IF SOLVED MAIN PROBLEM:\\n' +\n    '   - Celebrate enthusiastically: \"You just solved it!\" or \"That\\'s the answer!\"\\n' +\n    '   - State solution explicitly: \"' + $json.current_problem.text + ' = ' + $json.message + '\"\\n' +\n    '   - Acknowledge scaffolding helped: \"Working through those steps helped you get there!\"\\n' +\n    '   - 2-3 sentences, excited celebratory tone\\n\\n' +\n    '   IF NOT YET SOLVED (still working through scaffolding):\\n' +\n    '   - CRITICAL ANTI-LOOP CHECK: Read the last tutor message in chat history\\n' +\n    '   - If you just asked \"what comes after X\", DO NOT ask about X again\\n' +\n    '   - Move to the NEXT logical step in the calculation\\n' +\n    '   - Ask about the NEXT scaffolding step toward main problem\\n' +\n    '   - Use exact numbers from: ' + $json.current_problem.text + '\\n' +\n    '   - Progress closer to final answer with DIFFERENT question\\n' +\n    '   - 1-2 sentences, encouraging tone\\n' +\n    '   - DO NOT repeat previous scaffolding questions\\n' +\n    '   - DO NOT give the final answer\\n\\n'\n  :\n    'ERROR: Unknown category ' + $json.category\n}}\n\n---\n\nCRITICAL QUALITY RULES (apply to ALL responses):\n\nGROUNDING (prevent hallucination):\n\u2713 Use ONLY numbers from: {{ $json.current_problem.text }}\n\u2713 Reference the actual problem, don't make up examples\n\u2713 If using number line, use actual problem's numbers\n\u2713 Real-world examples must use same numbers\n\nAGE-APPROPRIATE LANGUAGE (grades 3-5, ages 8-10):\n\u2713 Simple words: \"think\", \"check\", \"size\" (NOT \"contemplate\", \"ascertain\", \"magnitude\")\n\u2713 Short sentences: 5-12 words each\n\u2713 Everyday vocabulary a 9-year-old uses\n\u2713 Conversational, warm, encouraging tone\n\nCONCRETE EXAMPLES ONLY:\n\u2713 Number line (visual)\n\u2713 Real objects (apples, dollars, steps)\n\u2713 Temperature/position (familiar concepts)\n\u2713 NO abstract mathematical explanations\n\nANTI-LOOP PROTECTION:\n\u2713 Read recent conversation carefully: {{ $json.chat_history }}\n\u2713 If you've asked this question before, rephrase or try different angle\n\u2713 If student tried this approach, suggest different one\n\u2713 Don't repeat failed strategies\n\nFORMATTING:\n\u2713 DO NOT prefix with \"Tutor:\", \"Assistant:\", or any label\n\u2713 Respond directly as if speaking to student\n\u2713 1-3 sentences maximum (be concise!)\n\n---\n\nYour response:"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 250,
+          "temperature": 0.7
+        }
+      },
+      "id": "unified-response-node-001",
+      "name": "Response: Unified",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        1168,
+        -400
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "IsfTAJGtC8cYJaRq",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "UNIFIED: Handles all 6 categories + scaffolding + teach-back with comprehensive prompt"
     }
   ],
   "pinData": {},
@@ -1025,126 +845,49 @@
       "main": [
         [
           {
-            "node": "Response: Correct",
+            "node": "Response: Unified",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Response: Close",
+            "node": "Response: Unified",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Response: Wrong Operation",
+            "node": "Response: Unified",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Response: Conceptual",
+            "node": "Response: Unified",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Response: Stuck",
+            "node": "Response: Unified",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Response: Off-Topic",
+            "node": "Response: Unified",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Response: Scaffold Progress",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response: Correct": {
-      "main": [
-        [
-          {
-            "node": "Update Session & Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response: Close": {
-      "main": [
-        [
-          {
-            "node": "Update Session & Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response: Wrong Operation": {
-      "main": [
-        [
-          {
-            "node": "Update Session & Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response: Conceptual": {
-      "main": [
-        [
-          {
-            "node": "Update Session & Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response: Stuck": {
-      "main": [
-        [
-          {
-            "node": "Update Session & Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response: Off-Topic": {
-      "main": [
-        [
-          {
-            "node": "Update Session & Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response: Scaffold Progress": {
-      "main": [
-        [
-          {
-            "node": "Update Session & Format Response",
+            "node": "Response: Unified",
             "type": "main",
             "index": 0
           }
@@ -1178,6 +921,17 @@
         [
           {
             "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response: Unified": {
+      "main": [
+        [
+          {
+            "node": "Update Session & Format Response",
             "type": "main",
             "index": 0
           }
