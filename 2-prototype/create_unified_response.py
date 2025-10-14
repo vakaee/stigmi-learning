@@ -152,10 +152,12 @@ def create_unified_response_node():
     'Main Problem: ' + $json.current_problem.text + '\\n' +
     'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +
     'Student\\'s Scaffolding Response: \"' + $json.message + '\" ✓ CORRECT\\n' +
-    '\\nRecent Conversation (READ CAREFULLY):\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +
+    'Synthesis Action: ' + ($json.synthesis_action || 'continue') + '\\n' +
+    ($json.synthesis_hint ? 'Synthesis Hint: ' + $json.synthesis_hint + '\\n' : '') +
+    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n' +
     '---\\n\\n' +
     'YOUR STRATEGY - SCAFFOLD PROGRESS:\\n' +
-    'MANDATORY STRUCTURE: [Acknowledge correctness] + [Next step OR celebrate solution]\\n\\n' +
+    'MANDATORY STRUCTURE: [Acknowledge correctness] + [Next action based on synthesis_action]\\n\\n' +
     '1. ACKNOWLEDGE CORRECTNESS (ALWAYS SAY THIS FIRST):\\n' +
     '   \"Yes!\" or \"That\\'s right!\" or \"Correct!\" or \"Exactly!\"\\n\\n' +
     '2. CHECK: Did student just solve the MAIN problem?\\n' +
@@ -166,15 +168,19 @@ def create_unified_response_node():
     '   - State solution explicitly: \"' + $json.current_problem.text + ' = ' + $json.message + '\"\\n' +
     '   - Acknowledge scaffolding helped: \"Working through those steps helped you get there!\"\\n' +
     '   - 2-3 sentences, excited celebratory tone\\n\\n' +
-    '   IF NOT YET SOLVED (still working through scaffolding):\\n' +
-    '   - CRITICAL ANTI-LOOP CHECK: Read the last tutor message in chat history\\n' +
-    '   - If you just asked \"what comes after X\", DO NOT ask about X again\\n' +
-    '   - Move to the NEXT logical step in the calculation\\n' +
-    '   - Ask about the NEXT scaffolding step toward main problem\\n' +
-    '   - Use exact numbers from: ' + $json.current_problem.text + '\\n' +
-    '   - Progress closer to final answer with DIFFERENT question\\n' +
+    '   IF NOT YET SOLVED - Check synthesis_action:\\n\\n' +
+    '   ## MODE A: synthesis_action == \"synthesize\"\\n' +
+    '   USE THE SYNTHESIS HINT PROVIDED ABOVE.\\n' +
+    '   - The hint tells you exactly what synthesis question to ask\\n' +
+    '   - Rephrase it naturally in grade 3-5 language\\n' +
     '   - 1-2 sentences, encouraging tone\\n' +
-    '   - DO NOT repeat previous scaffolding questions\\n' +
+    '   - Example hint: \"You moved 3 steps then 5 more. Where are you?\"\\n' +
+    '   - Your response: \"Great! So you moved 3 steps to get to 0, then 5 more steps. Where do you end up?\"\\n\\n' +
+    '   ## MODE B: synthesis_action == \"continue\" (or not set)\\n' +
+    '   - Ask the NEXT scaffolding sub-question\\n' +
+    '   - Progress toward the main problem\\n' +
+    '   - Use exact numbers from: ' + $json.current_problem.text + '\\n' +
+    '   - 1-2 sentences, encouraging tone\\n' +
     '   - DO NOT give the final answer\\n\\n'
   :
     'ERROR: Unknown category ' + $json.category
@@ -258,6 +264,96 @@ Your response:"""
     return unified_node
 
 
+def create_synthesis_detector_node():
+    """Create the synthesis detector node."""
+
+    # Read the synthesis detector function
+    with open('functions/synthesis_detector.js', 'r') as f:
+        detector_code = f.read()
+        # Extract just the code logic (remove comments and wrapper)
+        # For n8n, we need just the JavaScript logic
+        code_lines = detector_code.split('\n')
+        # Find where actual code starts (after comments)
+        code_start = 0
+        for i, line in enumerate(code_lines):
+            if line.strip().startswith('const problem ='):
+                code_start = i
+                break
+        detector_logic = '\n'.join(code_lines[code_start:])
+
+    detector_node = {
+        "parameters": {
+            "jsCode": detector_logic
+        },
+        "id": "synthesis-detector-001",
+        "name": "Synthesis Detector",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+            900,
+            -400
+        ],
+        "notes": "Detects when to synthesize scaffolding sub-answers vs continue asking sub-questions"
+    }
+
+    # Also create the LLM node that will process the detector prompt
+    synthesis_llm_node = {
+        "parameters": {
+            "modelId": {
+                "__rl": True,
+                "value": "gpt-4o-mini",
+                "mode": "list",
+                "cachedResultName": "gpt-4o-mini"
+            },
+            "messages": {
+                "values": [
+                    {
+                        "content": "={{ $json.prompt }}"
+                    }
+                ]
+            },
+            "options": {
+                "maxTokens": 150,
+                "temperature": 0.1,
+                "responseFormat": "json_object"
+            }
+        },
+        "id": "synthesis-llm-001",
+        "name": "Synthesis LLM",
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 1.4,
+        "position": [
+            1000,
+            -400
+        ],
+        "credentials": {
+            "openAiApi": {
+                "id": "IsfTAJGtC8cYJaRq",
+                "name": "OpenAi account"
+            }
+        },
+        "notes": "LLM call to analyze scaffolding progress and decide synthesis vs continue"
+    }
+
+    # Parser node to extract JSON from LLM response
+    parse_synthesis_node = {
+        "parameters": {
+            "jsCode": "// Parse synthesis detector output\nconst llmResponse = $json.message?.content || $json.text || $json.response || '';\nconst parsed = JSON.parse(llmResponse);\n\nreturn {\n  json: {\n    ...parsed,\n    synthesis_action: parsed.action,\n    synthesis_hint: parsed.synthesis_hint || ''\n  }\n};"
+        },
+        "id": "parse-synthesis-001",
+        "name": "Parse Synthesis Decision",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+            1100,
+            -400
+        ],
+        "notes": "Parse JSON output from synthesis detector"
+    }
+
+    return detector_node, synthesis_llm_node, parse_synthesis_node
+
+
 def modify_workflow(input_file, output_file):
     """Modify the n8n workflow to use unified response node."""
 
@@ -286,22 +382,50 @@ def modify_workflow(input_file, output_file):
     unified_node = create_unified_response_node()
     workflow['nodes'].append(unified_node)
 
+    print("Adding synthesis detector nodes...")
+    detector_node, synthesis_llm_node, parse_synthesis_node = create_synthesis_detector_node()
+    workflow['nodes'].extend([detector_node, synthesis_llm_node, parse_synthesis_node])
+
     print("Updating Route by Category connections...")
-    # Update Route by Category to point all outputs to unified node
+    # Update Route by Category to point outputs
+    # scaffold_progress (index 6) → Synthesis Detector → Response: Unified
+    # All others (0-5) → Response: Unified directly
     route_node_id = "7f14d2f5-9330-49b9-8d84-2e0de52baafe"  # Route by Category
     unified_node_id = "unified-response-node-001"
 
     if 'connections' not in workflow:
         workflow['connections'] = {}
 
-    # Find Route by Category in connections
-    route_connections = workflow['connections'].get('Route by Category', {})
-    if 'main' in route_connections:
-        # Point all 7 outputs to unified node
-        workflow['connections']['Route by Category']['main'] = [
-            [{"node": "Response: Unified", "type": "main", "index": 0}]  # correct
-            for _ in range(7)  # All 7 outputs point to same node
+    # Update Route by Category connections
+    workflow['connections']['Route by Category'] = {
+        "main": [
+            [{"node": "Response: Unified", "type": "main", "index": 0}],  # 0: correct
+            [{"node": "Response: Unified", "type": "main", "index": 0}],  # 1: close
+            [{"node": "Response: Unified", "type": "main", "index": 0}],  # 2: wrong_operation
+            [{"node": "Response: Unified", "type": "main", "index": 0}],  # 3: conceptual_question
+            [{"node": "Response: Unified", "type": "main", "index": 0}],  # 4: stuck
+            [{"node": "Response: Unified", "type": "main", "index": 0}],  # 5: off_topic
+            [{"node": "Synthesis Detector", "type": "main", "index": 0}]   # 6: scaffold_progress
         ]
+    }
+
+    # Connect synthesis detector chain
+    print("Connecting synthesis detector chain...")
+    workflow['connections']['Synthesis Detector'] = {
+        "main": [
+            [{"node": "Synthesis LLM", "type": "main", "index": 0}]
+        ]
+    }
+    workflow['connections']['Synthesis LLM'] = {
+        "main": [
+            [{"node": "Parse Synthesis Decision", "type": "main", "index": 0}]
+        ]
+    }
+    workflow['connections']['Parse Synthesis Decision'] = {
+        "main": [
+            [{"node": "Response: Unified", "type": "main", "index": 0}]
+        ]
+    }
 
     print("Updating unified node connection to Update Session...")
     # Unified node → Update Session
@@ -340,7 +464,10 @@ def modify_workflow(input_file, output_file):
     print(f"\nSummary:")
     print(f"  - Removed: 7 old response nodes")
     print(f"  - Added: 1 unified response node")
-    print(f"  - Updated: Route by Category connections (all 7 outputs → unified)")
+    print(f"  - Added: 3 synthesis detector nodes (Detector + LLM + Parser)")
+    print(f"  - Updated: Route by Category connections")
+    print(f"    - Categories 0-5 → Response: Unified directly")
+    print(f"    - Category 6 (scaffold_progress) → Synthesis Detector → Response: Unified")
     print(f"  - Total nodes: {len(workflow['nodes'])}")
 
 
