@@ -14,6 +14,10 @@ def create_unified_response_node():
     unified_prompt = """={{
   $json.category == 'correct' ?
     'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +
+    'CRITICAL GROUNDING RULES (READ FIRST):\\n' +
+    '✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n' +
+    '✓ DO NOT make up different numbers or examples\\n' +
+    '✓ Reference the ACTUAL problem, not made-up scenarios\\n\\n' +
     'CONTEXT:\\n' +
     'Problem: ' + $json.current_problem.text + '\\n' +
     'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +
@@ -34,6 +38,10 @@ def create_unified_response_node():
     'EXAMPLE: \"Yes! Excellent work. Can you explain how you got ' + $json.message + ' for ' + $json.current_problem.text + '?\"\\n\\n'
   : $json.category == 'close' ?
     'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +
+    'CRITICAL GROUNDING RULES (READ FIRST):\\n' +
+    '✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n' +
+    '✓ DO NOT make up different numbers or examples\\n' +
+    '✓ Reference the ACTUAL problem, not made-up scenarios\\n\\n' +
     'CONTEXT:\\n' +
     'Problem: ' + $json.current_problem.text + '\\n' +
     'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +
@@ -52,10 +60,14 @@ def create_unified_response_node():
         '   - More explicit hint about where the error is\\n   - Point to the specific calculation or step\\n' :
         '   - Walk through one step explicitly, then let them finish\\n   - Give partial solution, ask them to complete it\\n'
     ) +
-    '\\nCRITICAL: Use ONLY the actual problem\\'s numbers: ' + $json.current_problem.text + '\\n' +
-    '2-3 sentences maximum\\n\\n'
+    '\\n2-3 sentences maximum\\n\\n'
   : $json.category == 'wrong_operation' ?
     'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +
+    'CRITICAL GROUNDING RULES (READ FIRST):\\n' +
+    '✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n' +
+    '✓ DO NOT make up different numbers or examples\\n' +
+    '✓ If using examples, use ONLY actual problem numbers\\n' +
+    '✓ NEVER say \"3 apples\" when problem has \"-3\", NEVER say \"0 to 10\" when problem has \"-3 + 5\"\\n\\n' +
     'CONTEXT:\\n' +
     'Problem: ' + $json.current_problem.text + '\\n' +
     'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +
@@ -74,10 +86,13 @@ def create_unified_response_node():
         '   - Give more direct hint about the operation\\n   - \"Think about what + means - are we moving left or right?\"\\n' :
         '   - Teach the concept directly using THIS problem\\'s exact numbers\\n   - Walk through the concept, then ask them to try again\\n'
     ) +
-    '\\nCRITICAL: NO made-up examples with different numbers. Use: ' + $json.current_problem.text + '\\n' +
-    '2-3 sentences maximum\\n\\n'
+    '\\n2-3 sentences maximum\\n\\n'
   : $json.category == 'conceptual_question' ?
     'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +
+    'CRITICAL GROUNDING RULES (READ FIRST):\\n' +
+    '✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n' +
+    '✓ DO NOT make up different numbers or examples\\n' +
+    '✓ Reference the ACTUAL problem, not made-up scenarios\\n\\n' +
     'CONTEXT:\\n' +
     'Problem: ' + $json.current_problem.text + '\\n' +
     'Student\\'s Question: \"' + $json.message + '\"\\n' +
@@ -91,6 +106,12 @@ def create_unified_response_node():
     '\\n2-3 sentences total\\n\\n'
   : $json.category == 'stuck' ?
     'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +
+    'CRITICAL GROUNDING RULES (READ FIRST - ANTI-HALLUCINATION):\\n' +
+    '✓ ONLY use numbers from: ' + $json.current_problem.text + '\\n' +
+    '✓ NEVER make up different numbers (NO \"3 apples\", NO \"0 to 10\", NO different scenarios)\\n' +
+    '✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n' +
+    '✓ BEFORE responding, verify: Are all numbers from the actual problem? ✓\\n' +
+    '✓ If you mention examples, they must use EXACT problem numbers\\n\\n' +
     'CONTEXT:\\n' +
     'Problem: ' + $json.current_problem.text + '\\n' +
     'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +
@@ -110,16 +131,25 @@ def create_unified_response_node():
     :
       $json.is_scaffolding_active ?
         '## CONTINUE SCAFFOLDING (student didn\\'t get sub-question):\\n' +
+        'ANTI-HALLUCINATION CHECK FIRST:\\n' +
+        '  - Problem is: ' + $json.current_problem.text + '\\n' +
+        '  - You may ONLY reference these exact numbers\\n' +
+        '  - NO made-up examples with different numbers\\n\\n' +
         'MANDATORY STRUCTURE: [Acknowledge effort] + [Rephrase OR break down]\\n' +
         '- ACKNOWLEDGE: \"No problem!\" or \"Let me help!\"\\n' +
         '- ANTI-LOOP CHECK: Read last tutor message in chat history\\n' +
         '- If you already asked this question, rephrase it MORE SIMPLY\\n' +
         '- OR break into even SMALLER sub-question\\n' +
         '- Stay focused on main problem: ' + $json.current_problem.text + '\\n' +
+        '- Use ONLY numbers from the problem (not made-up examples)\\n' +
         '- DO NOT repeat the exact same question\\n' +
         '- 1-2 sentences, patient encouraging tone\\n\\n'
       :
         '## INITIATE SCAFFOLDING (break down problem):\\n' +
+        'ANTI-HALLUCINATION CHECK FIRST:\\n' +
+        '  - Problem is: ' + $json.current_problem.text + '\\n' +
+        '  - You may ONLY reference these exact numbers\\n' +
+        '  - If problem has \"-3 + 5\", DO NOT say \"3 apples\" or \"0 to 10\"\\n\\n' +
         'MANDATORY STRUCTURE: [Acknowledge] + [Scaffold question]\\n' +
         '- ACKNOWLEDGE: \"No problem!\" or \"Let\\'s work on this together!\"\\n' +
         '- SCAFFOLD: Break THIS problem into first small step\\n' +
@@ -134,6 +164,9 @@ def create_unified_response_node():
     '\\n'
   : $json.category == 'off_topic' ?
     'You are a friendly but focused math tutor for grades 3-5 (ages 8-10).\\n\\n' +
+    'CRITICAL GROUNDING RULES (READ FIRST):\\n' +
+    '✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n' +
+    '✓ DO NOT make up different numbers or examples\\n\\n' +
     'CONTEXT:\\n' +
     'Problem: ' + $json.current_problem.text + '\\n' +
     'Student Said: \"' + $json.message + '\" (unrelated to problem)\\n' +
@@ -148,6 +181,11 @@ def create_unified_response_node():
     '- \"Let\\'s focus on the math for now. What\\'s your answer?\"\\n\\n'
   : $json.category == 'scaffold_progress' ?
     'You are an encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +
+    'CRITICAL GROUNDING RULES (READ FIRST - ANTI-HALLUCINATION):\\n' +
+    '✓ ONLY use numbers from: ' + $json.current_problem.text + '\\n' +
+    '✓ NEVER make up different numbers (NO \"3 apples\", NO \"0 to 10\", NO different scenarios)\\n' +
+    '✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n' +
+    '✓ BEFORE responding, verify: Are all numbers from the actual problem? ✓\\n\\n' +
     'CONTEXT:\\n' +
     'Main Problem: ' + $json.current_problem.text + '\\n' +
     'Correct Answer: ' + $json.current_problem.correct_answer + '\\n' +
@@ -173,28 +211,37 @@ def create_unified_response_node():
     '   USE THE SYNTHESIS HINT PROVIDED ABOVE.\\n' +
     '   - The hint tells you exactly what synthesis question to ask\\n' +
     '   - Rephrase it naturally in grade 3-5 language\\n' +
+    '   - Use ONLY numbers from actual problem: ' + $json.current_problem.text + '\\n' +
     '   - 1-2 sentences, encouraging tone\\n' +
     '   - Example hint: \"You moved 3 steps then 5 more. Where are you?\"\\n' +
     '   - Your response: \"Great! So you moved 3 steps to get to 0, then 5 more steps. Where do you end up?\"\\n\\n' +
     '   ## MODE B: synthesis_action == \"continue\" (or not set)\\n' +
     '   - Ask the NEXT scaffolding sub-question\\n' +
     '   - Progress toward the main problem\\n' +
-    '   - Use exact numbers from: ' + $json.current_problem.text + '\\n' +
+    '   - Use ONLY exact numbers from: ' + $json.current_problem.text + '\\n' +
+    '   - NO made-up examples with different numbers\\n' +
     '   - 1-2 sentences, encouraging tone\\n' +
     '   - DO NOT give the final answer\\n\\n'
   :
-    'ERROR: Unknown category ' + $json.category
+    // FALLBACK for unknown categories (should never happen, but graceful degradation)
+    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\n' +
+    'CRITICAL GROUNDING RULES (READ FIRST):\\n' +
+    '✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n' +
+    '✓ DO NOT make up different numbers or examples\\n\\n' +
+    'CONTEXT:\\n' +
+    'Problem: ' + $json.current_problem.text + '\\n' +
+    'Student\\'s Response: \"' + $json.message + '\"\\n' +
+    '\\n---\\n\\n' +
+    'FALLBACK STRATEGY (unknown category: ' + $json.category + '):\\n' +
+    'Provide helpful encouragement and ask student to try again or ask for help.\\n' +
+    '- \"I want to help! Can you tell me more about what you\\'re thinking?\"\\n' +
+    '- \"Let\\'s work through this together. What do you think the answer is?\"\\n' +
+    '- 1-2 sentences, encouraging tone\\n\\n'
 }}
 
 ---
 
 CRITICAL QUALITY RULES (apply to ALL responses):
-
-GROUNDING (prevent hallucination):
-✓ Use ONLY numbers from: {{ $json.current_problem.text }}
-✓ Reference the actual problem, don't make up examples
-✓ If using number line, use actual problem's numbers
-✓ Real-world examples must use same numbers
 
 AGE-APPROPRIATE LANGUAGE (grades 3-5, ages 8-10):
 ✓ Simple words: "think", "check", "size" (NOT "contemplate", "ascertain", "magnitude")
@@ -202,11 +249,11 @@ AGE-APPROPRIATE LANGUAGE (grades 3-5, ages 8-10):
 ✓ Everyday vocabulary a 9-year-old uses
 ✓ Conversational, warm, encouraging tone
 
-CONCRETE EXAMPLES ONLY:
-✓ Number line (visual)
-✓ Real objects (apples, dollars, steps)
-✓ Temperature/position (familiar concepts)
+CONCRETE EXAMPLES (if needed):
+✓ Number line visualization using ONLY problem numbers
+✓ Real-world analogies (steps, position) using ONLY problem numbers
 ✓ NO abstract mathematical explanations
+✓ NEVER create examples with different numbers
 
 ANTI-LOOP PROTECTION:
 ✓ Read recent conversation carefully: {{ $json.chat_history }}
@@ -241,7 +288,7 @@ Your response:"""
             },
             "options": {
                 "maxTokens": 250,
-                "temperature": 0.7
+                "temperature": 0.3
             }
         },
         "id": "unified-response-node-001",
@@ -369,10 +416,14 @@ def modify_workflow(input_file, output_file):
         "f3461504-6ebd-4c75-a8a8-80e12a1a584d",  # Response: Conceptual
         "bcf94608-d54a-4b84-945c-64b31d15dc02",  # Response: Stuck
         "0cd73530-c7bc-4abb-86ae-f47f9fdf7de4",  # Response: Off-Topic
-        "79eb8ce3-c5bd-4bb6-9678-2e28027d605f"   # Response: Scaffold Progress
+        "79eb8ce3-c5bd-4bb6-9678-2e28027d605f",  # Response: Scaffold Progress
+        "unified-response-node-001",              # Unified (remove duplicates)
+        "synthesis-detector-001",                  # Synthesis Detector (remove duplicates)
+        "synthesis-llm-001",                       # Synthesis LLM (remove duplicates)
+        "parse-synthesis-001"                      # Parse Synthesis (remove duplicates)
     ]
 
-    print(f"Removing {len(old_response_node_ids)} old response nodes...")
+    print(f"Removing old response nodes (including duplicates)...")
     workflow['nodes'] = [
         node for node in workflow['nodes']
         if node['id'] not in old_response_node_ids
