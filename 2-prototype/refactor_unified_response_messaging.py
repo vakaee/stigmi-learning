@@ -9,6 +9,7 @@ Refactor unified response messaging to fix:
 6. Simplify scaffolding progress responses
 7. Add variable acknowledgment intensity
 8. Enable natural transitions
+9. Add numeric extraction for main problem detection during scaffolding
 """
 
 import json
@@ -151,20 +152,40 @@ def create_refactored_prompt():
     prompt += "STRATEGY - SCAFFOLD PROGRESS:\\n' +\n"
     prompt += "    '\\n1. ACKNOWLEDGE: \"Yes!\" or \"Right!\" (choose ONE)\\n' +\n"
     prompt += "    '\\n2. CHECK: Did student just solve the MAIN problem?\\n' +\n"
-    prompt += "    '   Compare \"' + $json.message + '\" to \"' + $json.current_problem.correct_answer + '\"\\n' +\n"
-    prompt += "    '   (Equivalent: \"2\" = \"two\", \"-3\" = \"negative 3\")\\n' +\n"
-    prompt += "    '\\n   IF SOLVED MAIN PROBLEM:\\n' +\n"
-    prompt += "    '   - Celebrate: \"You solved it!\"\\n' +\n"
+    prompt += "    '\\n' +\n"
+    prompt += "    '   STEP A - Extract any numeric answer from student message:\\n' +\n"
+    prompt += "    '   Student said: \"' + $json.message + '\"\\n' +\n"
+    prompt += "    '   Look for answer phrases:\\n' +\n"
+    prompt += "    '   - \"I think it\\'s [NUMBER]\" → extract NUMBER\\n' +\n"
+    prompt += "    '   - \"the answer is [NUMBER]\" → extract NUMBER\\n' +\n"
+    prompt += "    '   - \"it\\'s [NUMBER]\" → extract NUMBER\\n' +\n"
+    prompt += "    '   - \"[NUMBER]\" or \"[NUMBER]?\" → extract NUMBER\\n' +\n"
+    prompt += "    '   - \"two\", \"negative 3\", \"minus 2\" → convert to numeric\\n' +\n"
+    prompt += "    '   - If no number found → student gave conceptual answer, NOT main problem\\n' +\n"
+    prompt += "    '\\n' +\n"
+    prompt += "    '   STEP B - Compare extracted number to correct answer:\\n' +\n"
+    prompt += "    '   Correct answer: ' + $json.current_problem.correct_answer + '\\n' +\n"
+    prompt += "    '   Does extracted number match? (\"2\" = \"two\" = \"2.0\", \"-3\" = \"negative 3\")\\n' +\n"
+    prompt += "    '\\n' +\n"
+    prompt += "    '   IF MATCH FOUND → Student solved the main problem:\\n' +\n"
+    prompt += "    '   - Celebrate enthusiastically: \"You solved it! ' + $json.current_problem.text + ' = [ANSWER]\"\\n' +\n"
     prompt += "    '   - 2-3 sentences, excited tone\\n' +\n"
-    prompt += "    '\\n   IF NOT YET SOLVED:\\n' +\n"
-    prompt += "    '   - If synthesis_action == \"synthesize\":\\n' +\n"
-    prompt += "    '     Use the synthesis hint provided above\\n' +\n"
-    prompt += "    '     Rephrase naturally in grade 3-5 language\\n' +\n"
-    prompt += "    '     EXAMPLE: \"Right! So where do you end up?\"\\n' +\n"
-    prompt += "    '   - If synthesis_action == \"continue\":\\n' +\n"
-    prompt += "    '     Acknowledge and ask next step\\n' +\n"
-    prompt += "    '     DON\\'T re-explain what they just did correctly\\n' +\n"
-    prompt += "    '     EXAMPLE: \"Yes! So ' + $json.current_problem.text + ' means... (continue teaching)\"\\n' +\n"
+    prompt += "    '\\n' +\n"
+    prompt += "    '   IF NO MATCH (or no number found) → Continue scaffolding:\\n' +\n"
+    prompt += "    '   - Student gave conceptual answer (\"adding\", \"move right\", etc.)\\n' +\n"
+    prompt += "    '   - OR gave wrong numeric answer\\n' +\n"
+    prompt += "    '   - Continue teaching toward main problem\\n' +\n"
+    prompt += "    '\\n' +\n"
+    prompt += "    '   If synthesis_action == \"synthesize\":\\n' +\n"
+    prompt += "    '   - Use the synthesis hint provided above\\n' +\n"
+    prompt += "    '   - Rephrase naturally in grade 3-5 language\\n' +\n"
+    prompt += "    '   - EXAMPLE: \"Right! So where do you end up?\"\\n' +\n"
+    prompt += "    '\\n' +\n"
+    prompt += "    '   If synthesis_action == \"continue\":\\n' +\n"
+    prompt += "    '   - Acknowledge their conceptual answer\\n' +\n"
+    prompt += "    '   - Ask next step toward the main problem\\n' +\n"
+    prompt += "    '   - DON\\'T re-explain what they just said\\n' +\n"
+    prompt += "    '   - EXAMPLE: \"Yes! So ' + $json.current_problem.text + ' means... (continue)\"\\n' +\n"
     prompt += "    '\\n1-2 sentences total\\n\\n'\n"
 
     # FALLBACK
@@ -232,6 +253,7 @@ def refactor_workflow(input_file, output_file):
             print("✓ 6. Simplified scaffolding progress (don't re-explain correct work)")
             print("✓ 7. Enabled variable acknowledgment intensity")
             print("✓ 8. Enabled natural transitions (removed rigid formulas)")
+            print("✓ 9. Added numeric extraction for main problem detection during scaffolding")
 
             # Write back to file
             print(f"\nWriting updated workflow to {output_file}...")
@@ -275,6 +297,11 @@ def main():
         print("   AFTER:  Stated once at top (5 lines total)")
         print("   SAVINGS: 37-51 lines (token budget improvement)")
 
+        print("\n5. Main problem detection during scaffolding:")
+        print("   BEFORE: Student says 'I think it's 2' → continues scaffolding")
+        print("   AFTER:  Student says 'I think it's 2' → extracts '2' → celebrates!")
+        print("   FIX: Added explicit numeric extraction with answer phrase detection")
+
         print("\n" + "=" * 70)
         print("Overall Impact:")
         print("- 30-40% shorter responses")
@@ -282,6 +309,7 @@ def main():
         print("- Better context matching")
         print("- Faster generation (fewer tokens)")
         print("- Less repetitive patterns")
+        print("- Correctly detects when student solves main problem during scaffolding")
         print("=" * 70)
 
         return 0
