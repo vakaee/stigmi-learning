@@ -10,10 +10,10 @@
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
       "typeVersion": 1.1,
       "position": [
-        -3008,
-        5392
+        -5936,
+        -544
       ],
-      "id": "ce6a99ec-5d06-40f9-8dc6-61a39540cb11",
+      "id": "6b70c0fc-62f9-43df-b3a4-1d2c41702345",
       "name": "When chat message received",
       "webhookId": "d6075ce6-263d-4b56-82b1-de4f2f013f73"
     },
@@ -28,7 +28,7 @@
         "messages": {
           "values": [
             {
-              "content": "=Problem Type: {{ $json.current_problem.type || 'math_arithmetic' }}\n  Problem: {{ $json.current_problem.text }}\n  Correct Answer: {{ $json.current_problem.correct_answer }}\n  Student Message: \"{{ $json.message }}\"\n\n  Extract these features:\n\n  1. MESSAGE TYPE:\n     - answer_attempt: Contains numeric answer (e.g., \"2\", \"negative three\", \"45\")\n     - conceptual_response: Contains conceptual keywords WITHOUT being a question (e.g., \"adding\", \"to the right\", \"negative \n  number\")\n     - question: Asks a question about the problem or next steps (e.g., \"what do I do?\", \"how?\", \"now what?\")\n     - help_request: Explicit request for help or statement of confusion (e.g., \"I don't know\", \"help me\", \"I'm stuck\")\n     - off_topic: Completely unrelated to math problem (e.g., \"what's for lunch?\", \"I like cats\")\n\n  2. NUMERIC VALUE (if answer_attempt):\n     - Extract the number from message\n     - Convert written numbers: \"two\" → 2, \"negative three\" → -3\n     - Handle expressions: \"1/2\" → 0.5\n     - If multiple numbers, extract ANSWER (not process)\n     - **IMPORTANT: \"we get 2\" → extract 2, classify as answer_attempt**\n     - **IMPORTANT: \"2 steps past zero\" → extract 2, classify as answer_attempt**\n     - **IMPORTANT: \"the answer is 2\" → extract 2, classify as answer_attempt**\n     \n     If student states a number in their response, even with explanation,\n     classify as answer_attempt and extract that number.\n\n  3. KEYWORDS (if conceptual_response):\n     Extract: adding, subtracting, multiplying, dividing, plus, minus, times,\n     right, left, up, down, negative, positive, zero, number line\n\n  4. CONFIDENCE:\n     - 0.9-1.0: Clear extraction\n     - 0.7-0.9: Reasonably clear\n     - 0.0-0.7: Ambiguous\n\n  Return ONLY valid JSON:\n  {\n    \"message_type\": \"answer_attempt\" | \"conceptual_response\" | \"question\" | \"help_request\" | \"off_topic\",\n    \"numeric_value\": number | null,\n    \"keywords\": string[] | null,\n    \"confidence\": number\n  }\n\n  CRITICAL: Extract what student SAID, not what you think they MEANT.\n\n  EXAMPLES:\n  - \"2\" → {\"message_type\": \"answer_attempt\", \"numeric_value\": 2, \"keywords\": null, \"confidence\": 1.0}\n  - \"5 steps\" → {\"message_type\": \"answer_attempt\", \"numeric_value\": 5, \"keywords\": null, \"confidence\": 0.95}\n  - \"we get 2\" → {\"message_type\": \"answer_attempt\", \"numeric_value\": 2, \"keywords\": null, \"confidence\": 0.9}\n  - \"ok, so now what?\" → {\"message_type\": \"question\", \"numeric_value\": null, \"keywords\": null, \"confidence\": 0.9}\n  - \"adding\" → {\"message_type\": \"conceptual_response\", \"numeric_value\": null, \"keywords\": [\"adding\"], \"confidence\": 0.95}\n  - \"I don't know\" → {\"message_type\": \"help_request\", \"numeric_value\": null, \"keywords\": null, \"confidence\": 1.0}"
+              "content": "=Problem Type: {{ $json.current_problem.type || 'math_arithmetic' }}\n  Problem: {{ $json.current_problem.text }}\n  Correct Answer: {{ $json.current_problem.correct_answer }}\n  Student Message: \"{{ $json.message }}\"\n\n  ⚠️ CRITICAL RULES:\n  - Extract ONLY from student's message text\n  - DO NOT extract numbers from the problem text\n  - DO NOT extract the correct answer\n  - DO NOT infer meaning from context\n\n  Extract these features:\n\n  1. MESSAGE TYPE:\n     - answer_attempt: Contains numeric answer (e.g., \"2\", \"negative three\", \"45\", \"5 steps\")\n     - conceptual_response: Contains conceptual keywords WITHOUT being a question (e.g., \"adding\", \"to the right\", \"negative \n  number\")\n     - question: Asks a question about the problem or next steps (e.g., \"what do I do?\", \"how?\", \"now what?\")\n     - help_request: Explicit request for help or statement of confusion (e.g., \"I don't know\", \"help me\", \"I'm stuck\")\n     - off_topic: Completely unrelated to math problem (e.g., \"what's for lunch?\", \"I like cats\")\n\n  2. NUMERIC VALUE (if answer_attempt):\n     - Extract the number from student's message ONLY\n     - Convert written numbers: \"two\" → 2, \"negative three\" → -3\n     - Handle expressions: \"1/2\" → 0.5\n     - If multiple numbers, extract ANSWER (not process)\n     - **IMPORTANT: \"we get 2\" → extract 2, classify as answer_attempt**\n     - **IMPORTANT: \"2 steps past zero\" → extract 2, classify as answer_attempt**\n     - **IMPORTANT: \"the answer is 2\" → extract 2, classify as answer_attempt**\n\n  3. KEYWORDS (if conceptual_response):\n     Extract: adding, subtracting, multiplying, dividing, plus, minus, times,\n     right, left, up, down, negative, positive, zero, number line, yes, no\n\n  4. CONFIDENCE:\n     - 0.9-1.0: Clear extraction\n     - 0.7-0.9: Reasonably clear\n     - 0.0-0.7: Ambiguous\n\n  Return ONLY valid JSON:\n  {\n    \"message_type\": \"answer_attempt\" | \"conceptual_response\" | \"question\" | \"help_request\" | \"off_topic\",\n    \"numeric_value\": number | null,\n    \"keywords\": string[] | null,\n    \"confidence\": number\n  }\n\n  ⚠️ COMMON MISTAKES TO AVOID:\n  WRONG: Student says \"yes\" in problem \"What is -3 + 5? (answer: 2)\" → extracting numeric_value: 2\n  CORRECT: Student says \"yes\" → {\"message_type\": \"conceptual_response\", \"numeric_value\": null, \"keywords\": [\"yes\"], \n  \"confidence\": 1.0}\n\n  WRONG: Student says \"I don't know\" in problem with answer 5 → extracting numeric_value: 5\n  CORRECT: Student says \"I don't know\" → {\"message_type\": \"help_request\", \"numeric_value\": null, \"keywords\": null, \n  \"confidence\": 1.0}\n\n  EXAMPLES:\n  - \"2\" → {\"message_type\": \"answer_attempt\", \"numeric_value\": 2, \"keywords\": null, \"confidence\": 1.0}\n  - \"5 steps\" → {\"message_type\": \"answer_attempt\", \"numeric_value\": 5, \"keywords\": null, \"confidence\": 0.95}\n  - \"we get 2\" → {\"message_type\": \"answer_attempt\", \"numeric_value\": 2, \"keywords\": null, \"confidence\": 0.9}\n  - \"yes\" → {\"message_type\": \"conceptual_response\", \"numeric_value\": null, \"keywords\": [\"yes\"], \"confidence\": 1.0}\n  - \"no\" → {\"message_type\": \"conceptual_response\", \"numeric_value\": null, \"keywords\": [\"no\"], \"confidence\": 1.0}\n  - \"ok, so now what?\" → {\"message_type\": \"question\", \"numeric_value\": null, \"keywords\": null, \"confidence\": 0.9}\n  - \"adding\" → {\"message_type\": \"conceptual_response\", \"numeric_value\": null, \"keywords\": [\"adding\"], \"confidence\": 0.95}\n  - \"I don't know\" → {\"message_type\": \"help_request\", \"numeric_value\": null, \"keywords\": null, \"confidence\": 1.0}\n\n  Key changes:\n  - Added \"⚠️ CRITICAL RULES\" section at the top\n  - Added \"⚠️ COMMON MISTAKES TO AVOID\" section with explicit yes/no examples\n  - Added \"yes\" and \"no\" to keywords list\n  - Added \"yes\" and \"no\" examples to EXAMPLES section"
             }
           ]
         },
@@ -37,13 +37,13 @@
           "temperature": 0.1
         }
       },
-      "id": "1f8094c1-1e6d-4719-8609-8c2d16d68f18",
+      "id": "fc4bf19c-affb-4444-ba55-fb8c5d6a8079",
       "name": "Content Feature Extractor",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.3,
       "position": [
-        -2176,
-        5456
+        -5104,
+        -480
       ],
       "credentials": {
         "openAiApi": {
@@ -56,52 +56,52 @@
       "parameters": {
         "jsCode": "// Content-Based Router - handle append mode from Merge\n  const inputs = $input.all();\n\n  // Identify which input is which\n  let loadSessionData, featureExtractorData;\n\n  for (const input of inputs) {\n    const data = input.json;\n    if (data.message && data.message.content) {\n      // Content Feature Extractor (has OpenAI structure)\n      featureExtractorData = data;\n    } else if (data.session || data.current_problem) {\n      // Load Session data\n      loadSessionData = data;\n    }\n  }\n\n  // Parse JSON from OpenAI\n  const jsonString = featureExtractorData.message.content;\n  const features = JSON.parse(jsonString);\n\n  const messageType = features.message_type;\n  const isScaffolding = loadSessionData.session?.current_problem?.scaffolding?.active || false;\n  const teachBackActive = loadSessionData.session?.current_problem?.teach_back?.active || false;\n\n  // Route based on message type\n  let route;\n\n  if (teachBackActive) {\n    // Check if it's a help request\n    if (messageType === 'help_request') {\n      route = 'classify_stuck';\n    } else {\n      route = 'teach_back_validator';\n    }\n  } else if (messageType === 'answer_attempt') {\n    if (isScaffolding) {\n      // Check if this might be the main problem answer\n      const numericValue = features.numeric_value;\n      const correctAnswer = loadSessionData.current_problem.correct_answer;\n      const correctValue = parseFloat(String(correctAnswer).replace(/[^0-9.\\-]/g, ''));\n      const diff = Math.abs(numericValue - correctValue);\n\n      // If answer is close to main problem answer, verify it\n      if (diff < Math.max(Math.abs(correctValue * 0.5), 1)) {\n        route = 'verify_numeric';\n      } else {\n        // Otherwise, it's a scaffolding sub-answer\n        route = 'validate_conceptual';\n      }\n    } else {\n      route = 'verify_numeric';\n    }\n  } else if (messageType === 'conceptual_response') {\n    route = 'validate_conceptual';\n  } else if (messageType === 'question' || messageType === 'help_request') {\n    route = 'classify_stuck';\n  } else {\n    route = 'classify_stuck';\n  }\n\n  return {\n    json: {\n      ...loadSessionData,\n      ...features,\n      _route: route\n    }\n  };"
       },
-      "id": "6c773731-5dfb-4c3e-90b7-7bb6fe758046",
+      "id": "ae0076ef-0ccd-438d-8c7b-eae42b351ac9",
       "name": "Content-Based Router",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2192,
-        6000
+        -5120,
+        64
       ]
     },
     {
       "parameters": {
         "jsCode": "// Enhanced Numeric Verifier with Configurable Error Detection\n\n  // Embedded configuration\n  const ERROR_DETECTORS = {\n    'math_arithmetic_addition': (num1, num2, operation) => {\n      return [\n        Math.abs(num1) + Math.abs(num2),\n        num1 - num2,\n        Math.abs(num1 - num2),\n        -(num1 + num2)\n      ];\n    },\n    'math_arithmetic_subtraction': (num1, num2, operation) => {\n      return [\n        num1 + num2,\n        Math.abs(num1) + Math.abs(num2),\n        num2 - num1,\n        Math.abs(num1 - num2)\n      ];\n    },\n    'math_arithmetic_multiplication': (num1, num2, operation) => {\n      return [\n        num1 + num2,\n        Math.abs(num1 * num2),\n        -(num1 * num2)\n      ];\n    },\n    'math_arithmetic_division': (num1, num2, operation) => {\n      if (num2 === 0) return [];\n      return [\n        num1 * num2,\n        num2 / num1,\n        Math.abs(num1 / num2),\n        -(num1 / num2)\n      ];\n    }\n  };\n\n  const input = $input.first().json;\n  const studentValue = input.numeric_value;\n  const correctAnswer = input.current_problem.correct_answer;\n  const problemText = input.current_problem.text;\n\n  // Parse correct answer\n  let correctValue;\n  try {\n    correctValue = parseFloat(String(correctAnswer).replace(/[^0-9.\\-]/g, ''));\n    if (isNaN(correctValue)) throw new Error('Cannot parse correct answer');\n  } catch (error) {\n    return {\n      json: {\n        ...input,\n        category: 'stuck',\n        is_main_problem_attempt: true,\n        confidence: 0.5,\n        reasoning: `Cannot verify: ${error.message}`\n      }\n    };\n  }\n\n  // Validate numeric value\n  if (studentValue === null || isNaN(studentValue)) {\n    return {\n      json: {\n        ...input,\n        category: 'stuck',\n        is_main_problem_attempt: true,\n        confidence: 0.8,\n        reasoning: 'Could not extract valid numeric value'\n      }\n    };\n  }\n\n  // Calculate difference\n  const diff = Math.abs(studentValue - correctValue);\n\n  // Check if correct\n  if (diff < 0.001) {\n    return {\n      json: {\n        ...input,\n        category: 'correct',\n        is_main_problem_attempt: true,\n        confidence: 1.0,\n        reasoning: `Student answered ${studentValue}, correct!`\n      }\n    };\n  }\n\n  // Check if close\n  const percentThreshold = Math.abs(correctValue * 0.2);\n  const closeThreshold = Math.max(percentThreshold, 0.3);\n  if (diff <= closeThreshold) {\n    return {\n      json: {\n        ...input,\n        category: 'close',\n        is_main_problem_attempt: true,\n        confidence: 0.9,\n        reasoning: `Student answered ${studentValue}, close to ${correctValue} (diff: ${diff.toFixed(2)})`\n      }\n    };\n  }\n\n  // Check if plausible operation error\n  const match = problemText.match(/([\\-\\d.]+)\\s*([+\\-*/])\\s*([\\-\\d.]+)/);\n  if (match) {\n    const num1 = parseFloat(match[1]);\n    const operation = match[2];\n    const num2 = parseFloat(match[3]);\n\n    const operationMap = {\n      '+': 'math_arithmetic_addition',\n      '-': 'math_arithmetic_subtraction',\n      '*': 'math_arithmetic_multiplication',\n      '/': 'math_arithmetic_division'\n    };\n\n    const detectorKey = operationMap[operation];\n    const errorDetector = ERROR_DETECTORS[detectorKey];\n\n    if (errorDetector) {\n      const possibleErrors = errorDetector(num1, num2, operation);\n      const isOperationError = possibleErrors.some(errorValue =>\n        Math.abs(studentValue - errorValue) < 0.001\n      );\n\n      if (isOperationError) {\n        return {\n          json: {\n            ...input,\n            category: 'wrong_operation',\n            is_main_problem_attempt: true,\n            confidence: 0.95,\n            reasoning: `Student answered ${studentValue}, likely operation misconception`\n          }\n        };\n      }\n    }\n  }\n\n  // Not correct, not close, not operation error → stuck\n  return {\n    json: {\n      ...input,\n      category: 'stuck',\n      is_main_problem_attempt: true,\n      confidence: 0.85,\n      reasoning: `Student answered ${studentValue}, not close to ${correctValue}, doesn't match operation errors`\n    }\n  };"
       },
-      "id": "4dde6773-f613-4a7f-9a43-d873a80c27d0",
+      "id": "8e19d54a-b3bd-44f1-a4b9-807bbea0d493",
       "name": "Enhanced Numeric Verifier",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1760,
-        5472
+        -4688,
+        -464
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Semantic Validator - Configurable Pattern Matching\n\n  // Embedded configuration\n  const SEMANTIC_PATTERNS = {\n    'math_operation_identification': {\n      patterns: [\n        {\n          questionPatterns: ['adding or subtracting', 'add or subtract'],\n          expectedKeywords: {\n            '+': ['adding', 'add', 'plus', 'addition', 'sum'],\n            '-': ['subtracting', 'subtract', 'minus', 'subtraction', 'difference']\n          },\n          wrongKeywords: {\n            '+': ['subtracting', 'subtract', 'minus', 'subtraction'],\n            '-': ['adding', 'add', 'plus', 'addition']\n          }\n        }\n      ]\n    },\n    'math_direction_identification': {\n      patterns: [\n        {\n          questionPatterns: ['direction', 'which way', 'right or left'],\n          expectedKeywords: {\n            'positive': ['right', 'to the right', 'rightward', 'forward'],\n            'negative': ['left', 'to the left', 'leftward', 'backward']\n          },\n          wrongKeywords: {\n            'positive': ['left', 'to the left', 'leftward'],\n            'negative': ['right', 'to the right', 'rightward']\n          }\n        }\n      ]\n    },\n    'math_negative_number_concept': {\n      patterns: [\n        {\n          questionPatterns: ['what does -', 'what is -', 'negative number'],\n          expectedKeywords: ['negative', 'less than zero', 'below zero', 'left of zero'],\n          wrongKeywords: ['positive', 'greater than zero', 'above zero']\n        }\n      ]\n    }\n  };\n\n  const input = $input.first().json;\n  const studentMessage = (input.student_message || input.message || '').toLowerCase();\n  const scaffoldingQuestion = (input.scaffolding_last_question || '').toLowerCase();\n  const keywords = input.keywords || [];\n  const problemText = input.current_problem.text || '';\n\n  let isCorrect = false;\n  let reasoning = '';\n  let needsLLMValidation = false;\n\n  patternLoop: for (const [patternType, patternConfig] of Object.entries(SEMANTIC_PATTERNS)) {\n    for (const pattern of patternConfig.patterns) {\n      const questionMatches = pattern.questionPatterns.some(qp =>\n        scaffoldingQuestion.includes(qp.toLowerCase())\n      );\n\n      if (!questionMatches) continue;\n\n      if (pattern.expectedKeywords) {\n        let expectedSet = [];\n        let wrongSet = [];\n\n        if (patternType === 'math_operation_identification') {\n          if (problemText.includes('+') && !problemText.includes('+ -')) {\n            expectedSet = pattern.expectedKeywords['+'];\n            wrongSet = pattern.wrongKeywords['+'];\n          } else if (problemText.includes('-') && !problemText.includes('+ -')) {\n            expectedSet = pattern.expectedKeywords['-'];\n            wrongSet = pattern.wrongKeywords['-'];\n          }\n        } else if (patternType === 'math_direction_identification') {\n          if (problemText.match(/\\+\\s*\\d/) || scaffoldingQuestion.includes('positive')) {\n            expectedSet = pattern.expectedKeywords['positive'];\n            wrongSet = pattern.wrongKeywords['positive'];\n          } else if (problemText.match(/\\-\\s*\\d/) || scaffoldingQuestion.includes('negative')) {\n            expectedSet = pattern.expectedKeywords['negative'];\n            wrongSet = pattern.wrongKeywords['negative'];\n          }\n        }\n\n        if (expectedSet.length > 0) {\n          const hasCorrect = keywords.some(kw => expectedSet.includes(kw));\n          const hasWrong = keywords.some(kw => wrongSet.includes(kw));\n\n          if (hasCorrect && !hasWrong) {\n            isCorrect = true;\n            reasoning = 'Student correctly identified concept';\n          } else if (hasWrong) {\n            isCorrect = false;\n            reasoning = 'Student gave incorrect answer';\n          } else {\n            needsLLMValidation = true;\n          }\n\n          break patternLoop;\n        }\n      }\n    }\n  }\n\n  if (needsLLMValidation || reasoning === '') {\n    return {\n      json: {\n        ...input,\n        category: 'stuck',\n        is_main_problem_attempt: false,\n        confidence: 0.5,\n        reasoning: 'Could not validate with patterns, needs LLM',\n        _needs_llm_validation: true\n      }\n    };\n  }\n\n  if (isCorrect) {\n    return {\n      json: {\n        ...input,\n        category: 'scaffold_progress',\n        is_main_problem_attempt: false,\n        confidence: 0.95,\n        reasoning: reasoning\n      }\n    };\n  } else {\n    return {\n      json: {\n        ...input,\n        category: 'stuck',\n        is_main_problem_attempt: false,\n        confidence: 0.9,\n        reasoning: reasoning\n      }\n    };\n  }"
+        "jsCode": "// Semantic Validator - Configurable Pattern Matching\n\n  // Embedded configuration\n  const SEMANTIC_PATTERNS = {\n    'math_operation_identification': {\n      patterns: [\n        {\n          questionPatterns: ['adding or subtracting', 'add or subtract'],\n          expectedKeywords: {\n            '+': ['adding', 'add', 'plus', 'addition', 'sum'],\n            '-': ['subtracting', 'subtract', 'minus', 'subtraction', 'difference']\n          },\n          wrongKeywords: {\n            '+': ['subtracting', 'subtract', 'minus', 'subtraction'],\n            '-': ['adding', 'add', 'plus', 'addition']\n          }\n        }\n      ]\n    },\n    'math_direction_identification': {\n      patterns: [\n        {\n          questionPatterns: ['direction', 'which way', 'right or left'],\n          expectedKeywords: {\n            'positive': ['right', 'to the right', 'rightward', 'forward'],\n            'negative': ['left', 'to the left', 'leftward', 'backward']\n          },\n          wrongKeywords: {\n            'positive': ['left', 'to the left', 'leftward'],\n            'negative': ['right', 'to the right', 'rightward']\n          }\n        }\n      ]\n    },\n    'math_negative_number_concept': {\n      patterns: [\n        {\n          questionPatterns: ['what does -', 'what is -', 'negative number'],\n          expectedKeywords: ['negative', 'less than zero', 'below zero', 'left of zero'],\n          wrongKeywords: ['positive', 'greater than zero', 'above zero']\n        }\n      ]\n    }\n  };\n\n  const input = $input.first().json;\n  const studentMessage = (input.student_message || input.message || '').toLowerCase();\n  const scaffoldingQuestion = (input.scaffolding_last_question || '').toLowerCase();\n  const keywords = input.keywords || [];\n  const problemText = input.current_problem.text || '';\n  const numericValue = input.numeric_value;\n\n  let isCorrect = false;\n  let reasoning = '';\n  let needsLLMValidation = false;\n\n  // PATTERN-BASED VALIDATION\n  patternLoop: for (const [patternType, patternConfig] of Object.entries(SEMANTIC_PATTERNS)) {\n    for (const pattern of patternConfig.patterns) {\n      const questionMatches = pattern.questionPatterns.some(qp =>\n        scaffoldingQuestion.includes(qp.toLowerCase())\n      );\n\n      if (!questionMatches) continue;\n\n      if (pattern.expectedKeywords) {\n        let expectedSet = [];\n        let wrongSet = [];\n\n        if (patternType === 'math_operation_identification') {\n          if (problemText.includes('+') && !problemText.includes('+ -')) {\n            expectedSet = pattern.expectedKeywords['+'];\n            wrongSet = pattern.wrongKeywords['+'];\n          } else if (problemText.includes('-') && !problemText.includes('+ -')) {\n            expectedSet = pattern.expectedKeywords['-'];\n            wrongSet = pattern.wrongKeywords['-'];\n          }\n        } else if (patternType === 'math_direction_identification') {\n          if (problemText.match(/\\+\\s*\\d/) || scaffoldingQuestion.includes('positive')) {\n            expectedSet = pattern.expectedKeywords['positive'];\n            wrongSet = pattern.wrongKeywords['positive'];\n          } else if (problemText.match(/\\-\\s*\\d/) || scaffoldingQuestion.includes('negative')) {\n            expectedSet = pattern.expectedKeywords['negative'];\n            wrongSet = pattern.wrongKeywords['negative'];\n          }\n        }\n\n        if (expectedSet.length > 0) {\n          const hasCorrect = keywords.some(kw => expectedSet.includes(kw));\n          const hasWrong = keywords.some(kw => wrongSet.includes(kw));\n\n          if (hasCorrect && !hasWrong) {\n            isCorrect = true;\n            reasoning = 'Student correctly identified concept';\n          } else if (hasWrong) {\n            isCorrect = false;\n            reasoning = 'Student gave incorrect answer';\n          } else {\n            needsLLMValidation = true;\n          }\n\n          break patternLoop;\n        }\n      }\n    }\n  }\n\n  // PROCESS-NUMBER VALIDATION (CORRECTED)\n  // If student mentions an exact operand from the problem, treat as partial understanding\n  if (reasoning === '' && numericValue !== null && !isNaN(numericValue)) {\n    const match = problemText.match(/([\\-\\d.]+)\\s*([+\\-*/])\\s*([\\-\\d.]+)/);\n    if (match) {\n      const num1 = parseFloat(match[1]);\n      const num2 = parseFloat(match[3]);\n\n      // Check if student's number matches EXACT operands (not absolute values)\n      const matchesNum1 = Math.abs(numericValue - num1) < 0.001;\n      const matchesNum2 = Math.abs(numericValue - num2) < 0.001;\n\n      if (matchesNum1 || matchesNum2) {\n        // Student identified an exact process number (showing partial understanding)\n        isCorrect = true;\n        reasoning = 'Student identified process number from problem';\n      }\n    }\n  }\n\n  // FALLBACK\n  if (needsLLMValidation || reasoning === '') {\n    return {\n      json: {\n        ...input,\n        category: 'stuck',\n        is_main_problem_attempt: false,\n        confidence: 0.5,\n        reasoning: 'Could not validate with patterns, needs LLM',\n        _needs_llm_validation: true\n      }\n    };\n  }\n\n  if (isCorrect) {\n    return {\n      json: {\n        ...input,\n        category: 'scaffold_progress',\n        is_main_problem_attempt: false,\n        confidence: 0.95,\n        reasoning: reasoning\n      }\n    };\n  } else {\n    return {\n      json: {\n        ...input,\n        category: 'stuck',\n        is_main_problem_attempt: false,\n        confidence: 0.9,\n        reasoning: reasoning\n      }\n    };\n  }"
       },
-      "id": "ded143d1-7324-47be-af5c-5930d0c8df95",
+      "id": "89d3e504-c7d7-4cdd-89df-88b55102c5c5",
       "name": "Semantic Validator",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1728,
-        5680
+        -4656,
+        -256
       ]
     },
     {
       "parameters": {
         "jsCode": "// Classify as stuck\n  const input = $input.first().json;\n\n  return {\n    json: {\n      ...input,\n      category: 'stuck',\n      is_main_problem_attempt: false,\n      confidence: 1.0,\n      reasoning: 'Student requested help'\n    }\n  };"
       },
-      "id": "f3e69b05-7e6e-40c0-9ba1-885a6e3a93fe",
+      "id": "99b1fd82-9fcc-43eb-b703-40607f94c313",
       "name": "Classify Stuck",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1664,
-        5792
+        -4592,
+        -144
       ]
     },
     {
@@ -210,13 +210,13 @@
           "fallbackOutput": "extra"
         }
       },
-      "id": "db0ddebc-bd66-46e7-8721-59367c59346c",
+      "id": "b216ec4a-154c-4366-9bb6-a9000eb93162",
       "name": "Route by Content Type",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        -1968,
-        5792
+        -4896,
+        -144
       ],
       "notes": "Routes to appropriate validator based on message content type"
     },
@@ -224,13 +224,13 @@
       "parameters": {
         "jsCode": "// Build Response Context - Merge validator output with session context\n  const input = $input.first().json;\n\n  // Input now has EVERYTHING from validators (which spread ...input)\n  // Extract session data\n  const session = input.session || {};\n\n  // Format recent turns as chat history string\n  let chatHistory = '';\n  if (session.recent_turns && session.recent_turns.length > 0) {\n    chatHistory = session.recent_turns.map((turn, i) => {\n      return `Student: ${turn.student_message}\\nTutor: ${turn.tutor_response}`;\n    }).join('\\n\\n');\n  }\n\n  // Extract scaffolding context from session\n  const scaffoldingActive = session.current_problem?.scaffolding?.active || false;\n  const scaffoldingLastQuestion = session.current_problem?.scaffolding?.last_question || '';\n  const teachBackActive = session.current_problem?.teach_back?.active || false;\n  const attemptCount = session.current_problem?.attempt_count || 0;\n\n  return [{\n    json: {\n      // Pass through everything from validator\n      ...input,\n\n      // Add formatted chat history\n      chat_history: chatHistory,\n\n      // Add session state for response generation\n      is_scaffolding_active: scaffoldingActive,\n      scaffolding_last_question: scaffoldingLastQuestion,\n      is_teach_back_active: teachBackActive,\n      attempt_count: attemptCount,\n\n      // Keep session for Update Session node\n      _session: session,\n      _session_id: input.session_id || input._session_id\n    }\n  }];"
       },
-      "id": "b3aaa3c3-3693-44c3-8116-96842d5924d4",
+      "id": "27a8ed3b-4c58-405b-a4c0-bb0f9d27d7df",
       "name": "Build Response Context1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -768,
-        5888
+        -3696,
+        -48
       ],
       "notes": "Formats conversation history and merges context for response nodes"
     },
@@ -241,13 +241,13 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "5972e070-97fe-4485-83d3-151819bc1963",
+      "id": "5010e923-07c8-4599-9df5-13fb3ff723a1",
       "name": "Webhook Trigger1",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [
-        -2992,
-        5744
+        -5920,
+        -192
       ],
       "webhookId": "tutor-message",
       "notes": "Receives: {student_id, session_id, message, current_problem: {id, text, correct_answer}}"
@@ -256,13 +256,13 @@
       "parameters": {
         "jsCode": "// Normalize Input - Transform chat and webhook payloads to consistent format\n  const inputData = $input.item.json;\n\n  // Detect source type\n  let source = 'unknown';\n  let normalizedData = {};\n\n  // Check if this is from Chat Trigger\n  if (inputData.chatId || inputData.chat || inputData.sessionId) {\n    source = 'chat';\n\n    // Map chat fields to expected format\n    normalizedData = {\n      session_id: inputData.chatId || inputData.sessionId || inputData.chat?.id || `chat_${Date.now()}`,\n      student_id: inputData.userId || inputData.user?.id || inputData.from || 'unknown_user',\n      message: inputData.chatInput || inputData.message || inputData.text || inputData.chatMessage || '',\n\n      // Default problem if none provided\n      current_problem: inputData.current_problem || {\n        id: 'default_problem_1',\n        text: 'What is -3 + 5?',\n        correct_answer: '2'\n      },\n\n      // Metadata\n      _source: 'chat',\n      _original_payload: inputData\n    };\n  }\n  // Check if this is from Webhook Trigger\n  else if (inputData.session_id || inputData.student_id || inputData.current_problem) {\n    source = 'webhook';\n\n    // Webhook already in correct format, just pass through\n    normalizedData = {\n      session_id: inputData.session_id,\n      student_id: inputData.student_id,\n      message: inputData.message,\n      current_problem: inputData.current_problem,\n\n      // Metadata\n      _source: 'webhook',\n      _original_payload: inputData\n    };\n  }\n  // Unknown source - try best guess\n  else {\n    source = 'unknown';\n\n    normalizedData = {\n      session_id: inputData.id || `session_${Date.now()}`,\n      student_id: inputData.user || 'unknown',\n      message: inputData.chatInput || inputData.message || inputData.text || '',\n      current_problem: {\n        id: 'default_problem_1',\n        text: 'What is -3 + 5?',\n        correct_answer: '2'\n      },\n\n      // Metadata\n      _source: 'unknown',\n      _original_payload: inputData,\n      _warning: 'Could not detect source type, using defaults'\n    };\n  }\n\n  return {\n    json: normalizedData\n  };"
       },
-      "id": "dff894d9-aa87-4f74-97d7-710b6b9da22d",
+      "id": "e236ed91-e943-4d15-b912-6bc2c2872d7d",
       "name": "Normalize input1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2720,
-        5568
+        -5648,
+        -368
       ],
       "notes": "Loads session from workflow static data, adds start_time for latency tracking"
     },
@@ -270,13 +270,13 @@
       "parameters": {
         "jsCode": "// Load or initialize session from REDIS\n// FIX: Read from Normalize Input, not from Redis node output\nconst normalizedInput = $('Normalize input1').first().json;\nconst sessionId = normalizedInput.session_id;\nconst studentId = normalizedInput.student_id;\nconst currentProblem = normalizedInput.current_problem || {\n  id: 'default_problem_1',\n  text: 'What is -3 + 5?',\n  correct_answer: '2'\n};\n\n// Get session from Redis Get node\nlet session = null;\nlet sessionFound = false;\n\ntry {\n  const redisData = $('Redis: Get Session1').first().json;\n  // Redis returns {key: '...', value: '...'} or {key: '...', propertyName: '...'}\n  if (redisData && (redisData.value || redisData.propertyName)) {\n    try {\n      session = JSON.parse(redisData.value || redisData.propertyName);\n      sessionFound = true;\n    } catch (error) {\n      session = null;\n    }\n  }\n} catch (error) {\n  // Redis node failed, will create new session\n}\n\nif (!session) {\n  // Create new session\n  session = {\n    session_id: sessionId,\n    student_id: studentId,\n    created_at: new Date().toISOString(),\n    last_active: new Date().toISOString(),\n    current_problem: {\n      id: currentProblem.id,\n      text: currentProblem.text,\n      correct_answer: currentProblem.correct_answer,\n      attempt_count: 0,\n      scaffolding: {\n        active: false,\n        depth: 0,\n        last_question: null\n      },\n      teach_back: {\n        active: false,\n        awaiting_explanation: false\n      }\n    },\n    recent_turns: [],\n    stats: {\n      total_turns: 0,\n      problems_attempted: 1,\n      problems_solved: 0\n    }\n  };\n}\n\n// Check if problem changed (Hybrid Memory: keep only last 3 turns for continuity)\nif (session.current_problem && session.current_problem.id !== currentProblem.id) {\n  // Keep last 3 turns from previous problem for continuity\n  if (session.recent_turns && session.recent_turns.length > 0) {\n    session.recent_turns = session.recent_turns.slice(-3);\n    session.recent_turns.forEach(turn => {\n      turn.is_previous_problem = true;\n    });\n  }\n\n  // Reset problem data\n  session.current_problem = {\n    id: currentProblem.id,\n    text: currentProblem.text,\n    correct_answer: currentProblem.correct_answer,\n    attempt_count: 0,\n    scaffolding: {\n      active: false,\n      depth: 0,\n      last_question: null\n    },\n    teach_back: {\n      active: false,\n      awaiting_explanation: false\n    }\n  };\n  session.stats.problems_attempted++;\n}\n\n// Ensure required fields exist (defensive programming)\nif (!session.recent_turns) {\n  session.recent_turns = [];\n}\nif (!session.current_problem) {\n  session.current_problem = {\n    id: currentProblem.id,\n    text: currentProblem.text,\n    correct_answer: currentProblem.correct_answer,\n    attempt_count: 0,\n    scaffolding: { active: false, depth: 0, last_question: null },\n    teach_back: { active: false, awaiting_explanation: false }\n  };\n} else {\n  // FIX: Even if session.current_problem exists, ensure text and correct_answer are present\n  // This fixes the bug where Redis has incomplete current_problem from previous saves\n  if (!session.current_problem.text || !session.current_problem.correct_answer || !session.current_problem.id) {\n    session.current_problem.id = session.current_problem.id || currentProblem.id;\n    session.current_problem.text = session.current_problem.text || currentProblem.text;\n    session.current_problem.correct_answer = session.current_problem.correct_answer || currentProblem.correct_answer;\n  }\n  // Ensure nested objects exist\n  if (!session.current_problem.scaffolding) {\n    session.current_problem.scaffolding = { active: false, depth: 0, last_question: null };\n  }\n  if (!session.current_problem.teach_back) {\n    session.current_problem.teach_back = { active: false, awaiting_explanation: false };\n  }\n}\n\n// DEFENSIVE: Force reset teach-back on first turn (prevent Redis corruption)\nif (session.recent_turns.length === 0) {\n  session.current_problem.teach_back = { active: false, awaiting_explanation: false };\n}\n\n// Add start time for latency tracking\nconst startTime = Date.now();\n\nreturn {\n  json: {\n    // FIX: Spread normalizedInput (has message field), not Redis output\n    ...normalizedInput,\n    // Then our explicit fields OVERRIDE\n    session: session,\n    _session_id: sessionId,\n    _start_time: startTime,\n    current_problem: currentProblem\n  }\n};"
       },
-      "id": "f177ce95-e62c-42f4-adac-9759cb227dca",
+      "id": "ed5b2aca-96bc-4ab0-94e5-6a33ff73ff97",
       "name": "Load Session1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2400,
-        5568
+        -5328,
+        -368
       ],
       "notes": "Loads session from workflow static data, adds start_time for latency tracking"
     },
@@ -483,13 +483,13 @@
           "fallbackOutput": "extra"
         }
       },
-      "id": "18e18511-f9c2-4756-8ee6-96991e16a6fd",
+      "id": "464e5796-508e-4966-8a1d-a4324661d6b4",
       "name": "Route by Category1",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        -384,
-        5344
+        -3312,
+        -592
       ],
       "notes": "6-way router: sends to appropriate response generator"
     },
@@ -497,13 +497,13 @@
       "parameters": {
         "jsCode": "// Update session with conversation tracking\n  const responseData = $input.first().json;\n  const response = responseData.message?.content || responseData.text || \"I'm here to help you learn!\";\n\n  // Get context from Build Response Context1 (always has full context)\n  const contextData = $('Build Response Context1').first().json;\n\n  const session = contextData._session || contextData.session;\n  const category = contextData.category;\n\n  // Only increment attempt_count for main problem attempts\n  if (contextData.is_main_problem_attempt) {\n    session.current_problem.attempt_count++;\n  }\n\n  // STATE TRANSITIONS\n\n  // 1. SCAFFOLDING STATE MANAGEMENT\n  if (category === 'stuck' && !contextData.is_scaffolding_active && !contextData.is_teach_back_active) {\n    session.current_problem.scaffolding = {\n      active: true,\n      depth: 1,\n      last_question: response\n    };\n  } else if (category === 'scaffold_progress') {\n    if (session.current_problem.scaffolding) {\n      session.current_problem.scaffolding.depth++;\n      session.current_problem.scaffolding.last_question = response;\n    }\n  } else if (category === 'stuck' && contextData.is_scaffolding_active && !contextData.is_teach_back_active) {\n    if (session.current_problem.scaffolding) {\n      session.current_problem.scaffolding.last_question = response;\n    }\n  } else if (category === 'correct' && contextData.is_scaffolding_active) {\n    session.current_problem.scaffolding = {\n      active: false,\n      depth: 0,\n      last_question: null\n    };\n  }\n\n  // 2. TEACH-BACK STATE MANAGEMENT\n  if (category === 'correct' && !contextData.is_teach_back_active) {\n    session.current_problem.teach_back = {\n      active: true,\n      awaiting_explanation: true\n    };\n  } else if (category === 'teach_back_explanation') {\n    session.current_problem.teach_back = {\n      active: false,\n      awaiting_explanation: false\n    };\n  }\n\n  // Mark solved if correct\n  if (category === 'correct') {\n    session.stats.problems_solved++;\n  }\n\n  // Track conversation in recent_turns\n  if (!session.recent_turns) {\n    session.recent_turns = [];\n  }\n\n  session.recent_turns.push({\n    student_message: contextData.student_message || contextData.message,\n    tutor_response: response,\n    category: category,\n    timestamp: new Date().toISOString()\n  });\n\n  // Keep only last 15 turns\n  if (session.recent_turns.length > 15) {\n    session.recent_turns = session.recent_turns.slice(-15);\n  }\n\n  session.last_active = new Date().toISOString();\n  session.stats.total_turns++;\n\n  return [{\n    json: {\n      output: response,\n      _session_id: contextData._session_id || contextData.session_id,\n      _session_for_redis: session\n    }\n  }];"
       },
-      "id": "801b77a3-c661-4d17-84c7-ab2ed6d537c4",
+      "id": "04976352-e7ed-479d-ada8-ba39c903223f",
       "name": "Update Session & Format Response1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        192,
-        5536
+        -2736,
+        -400
       ],
       "notes": "Calculates latency, updates session, saves to static data, formats API response"
     },
@@ -513,13 +513,13 @@
         "responseBody": "={{ $json }}",
         "options": {}
       },
-      "id": "6ff7be00-3b87-4308-9649-044191a52033",
+      "id": "464704fd-4a2d-44b9-a88b-18ec5c58e29d",
       "name": "Webhook Response1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        528,
-        5536
+        -2400,
+        -400
       ],
       "notes": "Returns: {response: string, metadata: {...}}"
     },
@@ -529,13 +529,13 @@
         "key": "=tutor_session:{{ $json.session_id }}",
         "options": {}
       },
-      "id": "728aae55-f34e-4d33-94dd-1bb0690713f2",
+      "id": "607aae63-7a49-4c23-991c-fd51f72381f5",
       "name": "Redis: Get Session1",
       "type": "n8n-nodes-base.redis",
       "typeVersion": 1,
       "position": [
-        -2560,
-        5568
+        -5488,
+        -368
       ],
       "credentials": {
         "redis": {
@@ -551,13 +551,13 @@
         "key": "=tutor_session:{{ $json._session_id }}",
         "value": "={{ JSON.stringify($json._session_for_redis) }}"
       },
-      "id": "bf3040cc-c4ea-4ecb-a6a2-ffbab9a0ff82",
+      "id": "364a6bc6-8b3c-4350-b4c0-fe2fb6e7b7db",
       "name": "Redis: Save Session1",
       "type": "n8n-nodes-base.redis",
       "typeVersion": 1,
       "position": [
-        320,
-        5536
+        -2608,
+        -400
       ],
       "credentials": {
         "redis": {
@@ -578,7 +578,7 @@
         "messages": {
           "values": [
             {
-              "content": "={{\n  $json.category == 'correct' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Answer: \"' + $json.message + '\" ✓ CORRECT\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    ($json.is_scaffolding_active ? 'Context: Solved through scaffolding\\n' : '') +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - TEACH-BACK:\\n' +\n    '1. Acknowledge briefly: \"Yes!\" or \"Correct!\" (choose ONE, not both)\\n' +\n    '2. Ask them to explain their reasoning\\n' +\n    '\\nEXAMPLE: \"Yes! How did you get ' + $json.current_problem.correct_answer + '?\"\\n' +\n    '\\n2-3 sentences maximum\\n\\n'\n  : $json.category == 'close' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Answer: \"' + $json.message + '\" (close but not quite)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - GENTLE PROBE:\\n' +\n    ($json.attempt_count == 1 ?\n      '- Probe gently: \"You\\'re close! Want to double-check?\"\\n' :\n      $json.attempt_count == 2 ?\n        '- More explicit hint about where the error is\\n' :\n        '- Walk through one step, then let them finish\\n'\n    ) +\n    '\\n2-3 sentences maximum\\n\\n'\n  : $json.category == 'wrong_operation' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Answer: \"' + $json.message + '\" (suggests misconception)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - CLARIFY MISCONCEPTION:\\n' +\n    ($json.attempt_count == 1 ?\n      '- Ask clarifying question: \"When we see +, are we adding or subtracting?\"\\n' :\n      $json.attempt_count == 2 ?\n        '- Give direct hint about the operation\\n' :\n        '- Teach the concept using this problem\\'s exact numbers\\n'\n    ) +\n    '\\n2-3 sentences maximum\\n\\n'\n  : $json.category == 'conceptual_question' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Question: \"' + $json.message + '\"\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - TEACH CONCEPT:\\n' +\n    '1. Brief simple definition (1 sentence, grade 3-5 vocabulary)\\n' +\n    '2. Concrete example using this problem\\'s actual numbers\\n' +\n    '3. End with check question\\n' +\n    '\\nEXAMPLE: \"A negative number is less than zero. In ' + $json.current_problem.text + ', the -3 means 3 steps left of zero. Can you try it now?\"\\n' +\n    '\\n2-3 sentences total\\n\\n'\n: $json.category == 'teach_back_explanation' ?\n    'STRATEGY - ACKNOWLEDGE TEACH-BACK EXPLANATION:\\n' +\n    'Check if explanation mentions correct answer (' + $json.current_problem.correct_answer + ')\\n' +\n    'IF MENTIONED: Celebrate! \"Great job explaining! You got it right!\"\\n' +\n    'IF NOT: \"Good start! Can you tell me what answer you got?\"\\n' +\n    '1-2 sentences\\n\\n'\n  : $json.category == 'stuck' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Response: \"' + $json.message + '\"\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    'Scaffolding Active: ' + $json.is_scaffolding_active + '\\n' +\n    'Teach-Back Active: ' + $json.is_teach_back_active + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - SCAFFOLD:\\n' +\n    ($json.is_teach_back_active ?\n      '## COMPLETE TEACH-BACK (student can\\'t explain):\\n' +\n      '- Acknowledge: \"That\\'s okay!\"\\n' +\n      '- Provide solution: \"' + $json.current_problem.text + ' = ' + $json.current_problem.correct_answer + '\"\\n' +\n      '- Brief explanation using problem numbers\\n' +\n      '- 1-2 sentences total\\n\\n'\n    :\n      $json.is_scaffolding_active ?\n        '## CONTINUE SCAFFOLDING (student stuck on sub-question):\\n' +\n        'ACKNOWLEDGE based on response type:\\n' +\n        '- If \"I don\\'t know\" / asking for help → \"Let me help!\"\\n' +\n        '- If wrong numeric answer → \"Not quite. Let\\'s try...\"\\n' +\n        '- NEVER say \"No problem!\" for wrong answers\\n' +\n        '\\nTHEN:\\n' +\n        '- Rephrase question more simply OR break into smaller sub-question\\n' +\n        '- Read chat history to avoid repeating same question\\n' +\n        '- Use ONLY numbers from problem\\n' +\n        '- 1-2 sentences\\n\\n'\n      :\n        '## START SCAFFOLDING (break down problem):\\n' +\n        'Break problem into first small step.\\n' +\n        '\\n' +\n        ($json.attempt_count == 1 ? '- Start conceptual: \"What does -3 mean?\"\\n' :\n         $json.attempt_count == 2 ? '- Guide step-by-step: \"Let\\'s start at -3 on the number line\"\\n' :\n         '- Walk through most steps, leave only final step for them\\n'\n        ) +\n        '- 1-2 sentences, encouraging tone\\n' +\n        '\\nEXAMPLE: \"Let\\'s work together! What does -3 mean?\"\\n\\n'\n    ) +\n    '\\n'\n  : $json.category == 'off_topic' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent Said: \"' + $json.message + '\" (unrelated to problem)\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - REDIRECT:\\n' +\n    '- Brief acknowledgment if appropriate\\n' +\n    '- Gently redirect to the math problem\\n' +\n    '- 1 sentence, warm friendly tone (not scolding)\\n' +\n    '\\nEXAMPLE: \"Let\\'s save that for later! What\\'s your answer?\"\\n\\n'\n  : $json.category == 'scaffold_progress' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Scaffolding Response: \"' + $json.message + '\" ✓ CORRECT\\n' +\n    'Synthesis Action: ' + ($json.synthesis_action || 'continue') + '\\n' +\n    ($json.synthesis_hint ? 'Synthesis Hint: ' + $json.synthesis_hint + '\\n' : '') +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - SCAFFOLD PROGRESS:\\n' +\n    '\\n1. ACKNOWLEDGE: \"Yes!\" or \"Right!\" (choose ONE)\\n' +\n    '\\n2. CHECK: Did student just solve the MAIN problem?\\n' +\n    '\\n' +\n    '   STEP A - Extract any numeric answer from student message:\\n' +\n    '   Student said: \"' + $json.message + '\"\\n' +\n    '   Look for answer phrases:\\n' +\n    '   - \"I think it\\'s [NUMBER]\" → extract NUMBER\\n' +\n    '   - \"the answer is [NUMBER]\" → extract NUMBER\\n' +\n    '   - \"it\\'s [NUMBER]\" → extract NUMBER\\n' +\n    '   - \"[NUMBER]\" or \"[NUMBER]?\" → extract NUMBER\\n' +\n    '   - \"two\", \"negative 3\", \"minus 2\" → convert to numeric\\n' +\n    '   - If no number found → student gave conceptual answer, NOT main problem\\n' +\n    '\\n' +\n    '   STEP B - Compare extracted number to correct answer:\\n' +\n    '   Correct answer: ' + $json.current_problem.correct_answer + '\\n' +\n    '   Does extracted number match? (\"2\" = \"two\" = \"2.0\", \"-3\" = \"negative 3\")\\n' +\n    '\\n' +\n    '   IF MATCH FOUND → Student solved the main problem:\\n' +\n    '   - Celebrate enthusiastically: \"You solved it! ' + $json.current_problem.text + ' = [ANSWER]\"\\n' +\n    '   - 2-3 sentences, excited tone\\n' +\n    '\\n' +\n    '   IF NO MATCH (or no number found) → Continue scaffolding:\\n' +\n    '   - Student gave conceptual answer (\"adding\", \"move right\", etc.)\\n' +\n    '   - OR gave wrong numeric answer\\n' +\n    '   - Continue teaching toward main problem\\n' +\n    '\\n' +\n    '   If synthesis_action == \"synthesize\":\\n' +\n    '   - Use the synthesis hint provided above\\n' +\n    '   - Rephrase naturally in grade 3-5 language\\n' +\n    '   - EXAMPLE: \"Right! So where do you end up?\"\\n' +\n    '\\n' +\n    '   If synthesis_action == \"continue\":\\n' +\n    '   - Acknowledge their conceptual answer\\n' +\n    '   - Ask next step toward the main problem\\n' +\n    '   - DON\\'T re-explain what they just said\\n' +\n    '   - EXAMPLE: \"Yes! So ' + $json.current_problem.text + ' means... (continue)\"\\n' +\n    '\\n1-2 sentences total\\n\\n'\n  :\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Response: \"' + $json.message + '\"\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nFALLBACK (unknown category: ' + $json.category + '):\\n' +\n    'Provide helpful encouragement and ask student to try again.\\n' +\n    '1-2 sentences\\n\\n'\n}}\n\n---\n\nCRITICAL QUALITY RULES:\n\nAGE-APPROPRIATE LANGUAGE (grades 3-5):\n✓ Simple words: \"think\", \"check\", \"size\"\n✓ Short sentences: 5-12 words each\n✓ Conversational, warm, encouraging tone\n\nCONCRETE EXAMPLES (only if needed):\n✓ Number line using ONLY problem numbers\n✓ Real-world analogies using ONLY problem numbers\n✓ NO abstract explanations\n✓ NEVER create examples with different numbers\n\nANTI-LOOP PROTECTION:\n✓ Read conversation history carefully: {{ $json.chat_history }}\n✓ If question asked before, rephrase or try different angle\n✓ Don't repeat failed strategies\n\nFORMATTING:\n✓ DO NOT prefix with \"Tutor:\", \"Assistant:\", or any label\n✓ Respond directly as if speaking to student\n✓ 1-3 sentences maximum (be concise!)\n\n---\n\nYour response:",
+              "content": "={{\n  $json.category == 'correct' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Answer: \"' + $json.message + '\" ✓ CORRECT\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    ($json.is_scaffolding_active ? 'Context: Solved through scaffolding\\n' : '') +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - TEACH-BACK:\\n' +\n    '1. Acknowledge: \"Yes!\" or \"Correct!\" (choose ONE)\\n' +\n  '2. Ask them to explain how they got THE CORRECT ANSWER: ' + $json.current_problem.correct_answer + '\\n' +\n  '3. DO NOT reference previous wrong answers from chat history\\n' +\n  '\\nEXAMPLE: \"Yes! How did you get ' + $json.current_problem.correct_answer + '?\"\\n' +\n    '\\n2-3 sentences maximum\\n\\n'\n  : $json.category == 'close' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Answer: \"' + $json.message + '\" (close but not quite)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - GENTLE PROBE:\\n' +\n    ($json.attempt_count == 1 ?\n      '- Probe gently: \"You\\'re close! Want to double-check?\"\\n' :\n      $json.attempt_count == 2 ?\n        '- More explicit hint about where the error is\\n' :\n        '- Walk through one step, then let them finish\\n'\n    ) +\n    '\\n2-3 sentences maximum\\n\\n'\n  : $json.category == 'wrong_operation' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Answer: \"' + $json.message + '\" (suggests misconception)\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - CLARIFY MISCONCEPTION:\\n' +\n    ($json.attempt_count == 1 ?\n      '- Ask clarifying question: \"When we see +, are we adding or subtracting?\"\\n' :\n      $json.attempt_count == 2 ?\n        '- Give direct hint about the operation\\n' :\n        '- Teach the concept using this problem\\'s exact numbers\\n'\n    ) +\n    '\\n2-3 sentences maximum\\n\\n'\n  : $json.category == 'conceptual_question' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Question: \"' + $json.message + '\"\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - TEACH CONCEPT:\\n' +\n    '1. Brief simple definition (1 sentence, grade 3-5 vocabulary)\\n' +\n    '2. Concrete example using this problem\\'s actual numbers\\n' +\n    '3. End with check question\\n' +\n    '\\nEXAMPLE: \"A negative number is less than zero. In ' + $json.current_problem.text + ', the -3 means 3 steps left of zero. Can you try it now?\"\\n' +\n    '\\n2-3 sentences total\\n\\n'\n: $json.category == 'teach_back_explanation' ?\n    'STRATEGY - ACKNOWLEDGE TEACH-BACK EXPLANATION:\\n' +\n    'Check if explanation mentions correct answer (' + $json.current_problem.correct_answer + ')\\n' +\n    'IF MENTIONED: Celebrate! \"Great job explaining! You got it right!\"\\n' +\n    'IF NOT: \"Good start! Can you tell me what answer you got?\"\\n' +\n    '1-2 sentences\\n\\n'\n  : $json.category == 'stuck' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Response: \"' + $json.message + '\"\\n' +\n    'Attempt #: ' + $json.attempt_count + '\\n' +\n    'Scaffolding Active: ' + $json.is_scaffolding_active + '\\n' +\n    'Teach-Back Active: ' + $json.is_teach_back_active + '\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - SCAFFOLD:\\n' +\n    ($json.is_teach_back_active ?\n      '## COMPLETE TEACH-BACK (student can\\'t explain):\\n' +\n      '- Acknowledge: \"That\\'s okay!\"\\n' +\n      '- Provide solution: \"' + $json.current_problem.text + ' = ' + $json.current_problem.correct_answer + '\"\\n' +\n      '- Brief explanation using problem numbers\\n' +\n      '- 1-2 sentences total\\n\\n'\n    :\n      $json.is_scaffolding_active ?\n        '## CONTINUE SCAFFOLDING (student stuck on sub-question):\\n' +\n        'ACKNOWLEDGE based on response type:\\n' +\n        '- If \"I don\\'t know\" / asking for help → \"Let me help!\"\\n' +\n        '- If wrong numeric answer → \"That\\'s not quite right. Let\\'s think about this...\"\\n' +\n        '- NEVER say \"No problem!\" for wrong answers\\n' +\n        '\\nTHEN:\\n' +\n        '- Rephrase question more simply OR break into smaller sub-question\\n' +\n        '- Read chat history to avoid repeating same question\\n' +\n        '- Use ONLY numbers from problem\\n' +\n        '- 1-2 sentences\\n\\n'\n      :\n        '## START SCAFFOLDING (break down problem):\\n' +\n        'Break problem into first small step.\\n' +\n        '\\n' +\n        ($json.attempt_count == 1 ? '- Start conceptual: \"What does -3 mean?\"\\n' :\n         $json.attempt_count == 2 ? '- Guide step-by-step: \"Let\\'s start at -3 on the number line\"\\n' :\n         '- Walk through most steps, leave only final step for them\\n'\n        ) +\n        '- 1-2 sentences, encouraging tone\\n' +\n        '\\nEXAMPLE: \"Let\\'s work together! What does -3 mean?\"\\n\\n'\n    ) +\n    '\\n'\n  : $json.category == 'off_topic' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent Said: \"' + $json.message + '\" (unrelated to problem)\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - REDIRECT:\\n' +\n    '- Brief acknowledgment if appropriate\\n' +\n    '- Gently redirect to the math problem\\n' +\n    '- 1 sentence, warm friendly tone (not scolding)\\n' +\n    '\\nEXAMPLE: \"Let\\'s save that for later! What\\'s your answer?\"\\n\\n'\n  : $json.category == 'scaffold_progress' ?\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Scaffolding Response: \"' + $json.message + '\" ✓ CORRECT\\n' +\n    'Synthesis Action: ' + ($json.synthesis_action || 'continue') + '\\n' +\n    ($json.synthesis_hint ? 'Synthesis Hint: ' + $json.synthesis_hint + '\\n' : '') +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nSTRATEGY - SCAFFOLD PROGRESS:\\n' +\n    '\\n1. ACKNOWLEDGE: \"Yes!\" or \"Right!\" (choose ONE)\\n' +\n    '\\n2. CHECK: Did student just solve the MAIN problem?\\n' +\n    '\\n' +\n    '   STEP A - Extract any numeric answer from student message:\\n' +\n    '   Student said: \"' + $json.message + '\"\\n' +\n    '   Look for answer phrases:\\n' +\n    '   - \"I think it\\'s [NUMBER]\" → extract NUMBER\\n' +\n    '   - \"the answer is [NUMBER]\" → extract NUMBER\\n' +\n    '   - \"it\\'s [NUMBER]\" → extract NUMBER\\n' +\n    '   - \"[NUMBER]\" or \"[NUMBER]?\" → extract NUMBER\\n' +\n    '   - \"two\", \"negative 3\", \"minus 2\" → convert to numeric\\n' +\n    '   - If no number found → student gave conceptual answer, NOT main problem\\n' +\n    '\\n' +\n    '   STEP B - Compare extracted number to correct answer:\\n' +\n    '   Correct answer: ' + $json.current_problem.correct_answer + '\\n' +\n    '   Does extracted number match? (\"2\" = \"two\" = \"2.0\", \"-3\" = \"negative 3\")\\n' +\n    '\\n' +\n    '   IF MATCH FOUND → Student solved the main problem:\\n' +\n    '   - Celebrate enthusiastically: \"You solved it! ' + $json.current_problem.text + ' = [ANSWER]\"\\n' +\n    '   - 2-3 sentences, excited tone\\n' +\n    '\\n' +\n    '   IF NO MATCH (or no number found) → Continue scaffolding:\\n' +\n    '   - Student gave conceptual answer (\"adding\", \"move right\", etc.)\\n' +\n    '   - OR gave wrong numeric answer\\n' +\n    '   - Continue teaching toward main problem\\n' +\n    '\\n' +\n    '   If synthesis_action == \"synthesize\":\\n' +\n    '   - Use the synthesis hint provided above\\n' +\n    '   - Rephrase naturally in grade 3-5 language\\n' +\n    '   - EXAMPLE: \"Right! So where do you end up?\"\\n' +\n    '\\n' +\n    '   If synthesis_action == \"continue\":\\n' +\n    '   - Acknowledge their conceptual answer\\n' +\n    '   - Ask next step toward the main problem\\n' +\n    '   - DON\\'T re-explain what they just said\\n' +\n    '   - EXAMPLE: \"Yes! Now, how many more steps do you need to take?\"\\n' +\n    '\\n1-2 sentences total\\n\\n'\n  :\n    'You are a patient, encouraging math tutor for grades 3-5 (ages 8-10).\\n\\nCRITICAL GROUNDING RULES (apply to ALL responses):\\n✓ Use ONLY numbers from this problem: ' + $json.current_problem.text + '\\n✓ NEVER make up different numbers, examples, or scenarios\\n✓ If problem is \"-3 + 5\", use ONLY -3, +, and 5\\n✓ Verify before responding: Are all numbers from the actual problem? ✓\\n\\nCONTEXT:\\nProblem: ' + $json.current_problem.text + '\\nCorrect Answer: ' + $json.current_problem.correct_answer + '\\nStudent\\'s Response: \"' + $json.message + '\"\\n' +\n    '\\nRecent Conversation:\\n' + ($json.chat_history || 'First interaction') + '\\n\\n---\\n\\nFALLBACK (unknown category: ' + $json.category + '):\\n' +\n    'Provide helpful encouragement and ask student to try again.\\n' +\n    '1-2 sentences\\n\\n'\n}}\n\n---\n\nCRITICAL QUALITY RULES:\n\nAGE-APPROPRIATE LANGUAGE (grades 3-5):\n✓ Simple words: \"think\", \"check\", \"size\"\n✓ Short sentences: 5-12 words each\n✓ Conversational, warm, encouraging tone\n\nCONCRETE EXAMPLES (only if needed):\n✓ Number line using ONLY problem numbers\n✓ Real-world analogies using ONLY problem numbers\n✓ NO abstract explanations\n✓ NEVER create examples with different numbers\n\nANTI-LOOP PROTECTION:\n✓ Read conversation history carefully: {{ $json.chat_history }}\n✓ If question asked before, rephrase or try different angle\n✓ Don't repeat failed strategies\n\nFORMATTING:\n✓ DO NOT prefix with \"Tutor:\", \"Assistant:\", or any label\n✓ Respond directly as if speaking to student\n✓ 1-3 sentences maximum (be concise!)\n\n---\n\nYour response:",
               "role": "system"
             }
           ]
@@ -588,13 +588,13 @@
           "temperature": 0.3
         }
       },
-      "id": "6d934178-9639-4ba8-aaab-93b5d7e1bf50",
+      "id": "229a8c61-5621-4a29-bc8a-254ba44e43b9",
       "name": "Response: Unified1",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.4,
       "position": [
-        -48,
-        5312
+        -2976,
+        -624
       ],
       "credentials": {
         "openAiApi": {
@@ -608,13 +608,13 @@
       "parameters": {
         "jsCode": "const problem = $json.current_problem.text;\nconst correctAnswer = $json.current_problem.correct_answer;\nconst studentMessage = $json.message;\nconst chatHistory = $json.chat_history || '';\n\n// Build prompt for synthesis detection\nconst prompt = `You are a scaffolding progress analyzer for a math tutor.\n\nCONTEXT:\nMain Problem: ${problem}\nCorrect Answer: ${correctAnswer}\nStudent's Latest Response: \"${studentMessage}\" (validated as correct scaffolding answer)\n\nRecent Conversation:\n${chatHistory}\n\n---\n\nYOUR TASK: Decide if it's time to SYNTHESIZE (combine sub-answers) or CONTINUE SCAFFOLDING.\n\nSYNTHESIS CRITERIA:\n✓ Student has answered 2+ related sub-questions correctly\n✓ Sub-answers can be combined to reach final answer\n✓ Tutor is repeating questions (same semantic meaning, different wording)\n✓ Student gave same answer twice (indicates loop)\n\nCONTINUE CRITERIA:\n✓ Only 1 sub-answer collected so far\n✓ Current sub-answer doesn't connect to previous ones\n✓ More intermediate steps needed before synthesis\n\n---\n\nANALYSIS STEPS:\n\n1. EXTRACT SUB-ANSWERS from chat history:\n   - Look for student responses that were acknowledged as correct\n   - Identify what each sub-answer represents (e.g., \"3 steps\", \"common denominator 4\")\n\n2. CHECK FOR LOOPS:\n   - Did tutor ask essentially the same question twice?\n   - Did student give the same answer twice?\n   - Example: \"How many steps from 0 to 5?\" then \"Count steps to 5\" = SAME QUESTION\n\n3. EVALUATE READINESS:\n   - Can sub-answers be combined to reach the final answer?\n   - Example: Sub-answers \"3\" and \"5\" for problem \"-3 + 5\" → YES, synthesize\n   - Example: Only one sub-answer → NO, continue\n\n4. GENERATE SYNTHESIS HINT (if synthesizing):\n   - Number line: \"You moved X steps then Y more. Where are you now?\"\n   - Fractions: \"You have X/Y + Z/Y. What's the numerator?\"\n   - Word problem: \"A has X, gets Y. What's the total?\"\n\n---\n\nOUTPUT FORMAT (valid JSON only):\n\n{\n  \"action\": \"synthesize\" OR \"continue\",\n  \"reason\": \"brief explanation of decision\",\n  \"sub_answers\": [\"array\", \"of\", \"collected\", \"sub\", \"answers\"],\n  \"synthesis_hint\": \"specific question to ask (only if action=synthesize, else empty string)\"\n}\n\nEXAMPLES:\n\nExample 1 - SYNTHESIZE:\nProblem: \"-3 + 5 = ?\"\nSub-answers: [\"3 steps from -3 to 0\", \"5 steps from 0 to 5\"]\nOutput: {\n  \"action\": \"synthesize\",\n  \"reason\": \"Student answered both sub-questions (3 and 5), ready to combine for final position\",\n  \"sub_answers\": [\"3\", \"5\"],\n  \"synthesis_hint\": \"You moved 3 steps right to get to 0, then 5 more steps right. Where do you end up?\"\n}\n\nExample 2 - CONTINUE:\nProblem: \"1/4 + 1/2 = ?\"\nSub-answers: [\"4\" (common denominator)]\nOutput: {\n  \"action\": \"continue\",\n  \"reason\": \"Only one sub-answer (common denominator), still need to convert fractions\",\n  \"sub_answers\": [\"4\"],\n  \"synthesis_hint\": \"\"\n}\n\nExample 3 - SYNTHESIZE (loop detected):\nProblem: \"-3 + 5 = ?\"\nLast tutor question: \"How many steps from 0 to 5?\"\nStudent answer: \"5\"\nPrevious occurrence: Tutor asked \"Count steps to 5\" and student said \"5 steps\"\nOutput: {\n  \"action\": \"synthesize\",\n  \"reason\": \"Loop detected - tutor asking same question with different wording, student already answered\",\n  \"sub_answers\": [\"3\", \"5\"],\n  \"synthesis_hint\": \"Great! You found 3 steps and 5 steps. Now put them together - where do you land?\"\n}\n\n---\n\nNOW ANALYZE THE CONTEXT ABOVE AND OUTPUT VALID JSON:`;\n\n// Return the prompt for the LLM call\nreturn {\n  json: {\n    prompt: prompt,\n    current_problem: $json.current_problem,\n    message: studentMessage,\n    chat_history: chatHistory\n  }\n};\n"
       },
-      "id": "5b0ad40c-b672-42cc-b167-5d4b0248fa91",
+      "id": "0815dd38-d26a-4e86-a8ec-5a54e69b43a2",
       "name": "Synthesis Detector1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -416,
-        5776
+        -3344,
+        -160
       ],
       "notes": "Detects when to synthesize scaffolding sub-answers vs continue asking sub-questions"
     },
@@ -638,13 +638,13 @@
           "temperature": 0.1
         }
       },
-      "id": "cd1b75d0-1c3c-403d-9971-5970f9135574",
+      "id": "c77bfefe-3ac1-4ae3-a30f-253091f453e6",
       "name": "Synthesis LLM1",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.4,
       "position": [
-        -512,
-        6064
+        -3440,
+        128
       ],
       "credentials": {
         "openAiApi": {
@@ -658,13 +658,13 @@
       "parameters": {
         "jsCode": "// Parse synthesis detector output\nconst llmResponse = $json.message?.content || $json.text || $json.response || '';\nconst parsed = JSON.parse(llmResponse);\n\n// Get original data from Build Response Context (contains category, etc.)\nconst originalData = $('Build Response Context1').first().json;\n\nreturn {\n  json: {\n    ...originalData,              // Preserve all original fields including category\n    ...parsed,                    // Add synthesis fields\n    synthesis_action: parsed.action,\n    synthesis_hint: parsed.synthesis_hint || ''\n  }\n};"
       },
-      "id": "14692e7a-a5fa-4d76-a2b1-2110f2337cbd",
+      "id": "74022ffd-3d1d-4042-94e1-f53947150e02",
       "name": "Parse Synthesis Decision1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -288,
-        5760
+        -3216,
+        -176
       ],
       "notes": "Parse JSON output from synthesis detector"
     },
@@ -673,23 +673,23 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        -2176,
-        5728
+        -5104,
+        -208
       ],
-      "id": "0c10f1b7-de20-4447-94dd-ccc9e194f1a1",
+      "id": "ee279f59-6f97-4057-a959-d558426a68a4",
       "name": "Merge"
     },
     {
       "parameters": {
-        "jsCode": "// Teach-Back Validator\n  const input = $input.first().json;\n  const studentMessage = (input.student_message || input.message || '').toLowerCase();\n  const numericValue = input.numeric_value;\n  const correctAnswer = input.current_problem.correct_answer;\n\n  // Detect help requests\n  const helpPatterns = [\"i don't know\", \"dont know\", \"not sure\", \"help me\", \"stuck\"];\n  const isHelpRequest = helpPatterns.some(p => studentMessage.includes(p));\n\n  if (isHelpRequest) {\n    return { json: { ...input, category: 'stuck', is_main_problem_attempt: false, confidence: 1.0, reasoning: 'Help request during teach-back' }};\n  }\n\n  // Detect explanation attempts\n  const explanationPatterns = ['i followed', 'i did', 'i got', 'because', 'i think', 'first', 'then'];\n  const hasExplanation = explanationPatterns.some(p => studentMessage.includes(p));\n\n  if (hasExplanation || numericValue !== null) {\n    return { json: { ...input, category: 'teach_back_explanation', is_main_problem_attempt: false, confidence: 0.9, reasoning:\n   'Explanation attempt' }};\n  }\n\n  return { json: { ...input, category: 'stuck', is_main_problem_attempt: false, confidence: 0.7, reasoning: 'Ambiguous' }};"
+        "jsCode": "// Teach-Back Validator\n  const input = $input.first().json;\n  const studentMessage = (input.student_message || input.message || '').toLowerCase();\n  const numericValue = input.numeric_value;\n  const correctAnswer = input.current_problem.correct_answer;\n\n  // Detect help requests\n  const helpPatterns = [\"i don't know\", \"dont know\", \"not sure\", \"help me\", \"stuck\"];\n  const isHelpRequest = helpPatterns.some(p => studentMessage.includes(p));\n\n  if (isHelpRequest) {\n    return { json: { ...input, category: 'stuck', is_main_problem_attempt: false, confidence: 1.0, reasoning: `Help request \n  during teach-back` }};\n  }\n\n  // Detect explanation attempts (EXPANDED)\n  const explanationPatterns = [\n    'i followed', 'i did', 'i got', 'because', 'i think', 'first', 'then',\n    'i counted', 'i used', 'i started', 'i imagined', 'i pictured', 'i visualized',\n    'i saw', 'i drew', 'number line', 'steps', 'it was easy', 'it was'\n  ];\n  const hasExplanation = explanationPatterns.some(p => studentMessage.includes(p));\n\n  if (hasExplanation || numericValue !== null) {\n    return { json: { ...input, category: 'teach_back_explanation', is_main_problem_attempt: false, confidence: 0.9, reasoning:\n   `Explanation attempt` }};\n  }\n\n  return { json: { ...input, category: 'stuck', is_main_problem_attempt: false, confidence: 0.7, reasoning: `Ambiguous` }};"
       },
-      "id": "744a624c-daa6-4717-addd-8361a4e1824d",
+      "id": "7e56aaab-0cc0-42e4-92a7-1ddfa2182d72",
       "name": "Teach-back validator",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1632,
-        5952
+        -4560,
+        16
       ]
     }
   ],
@@ -1002,11 +1002,11 @@
       ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "f154da14-190d-4d1f-9c41-b0c6e066a1b0",
+  "versionId": "52cdcb94-f29a-4db6-a211-41ffe5ca2427",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "15fdefe217dd497a3644ac7579dc52a8d91ba7b8a26ac0fbdc9f2ffe89ed0a93"
