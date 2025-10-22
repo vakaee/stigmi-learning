@@ -6,20 +6,30 @@ This file provides guidance to future instances when working with code in this r
 
 AI Tutor POC - Adaptive math tutoring system demonstrating intelligent student response classification, answer verification, multi-turn conversation memory, and Socratic teaching methodology. Built as a proof-of-concept using n8n workflow orchestration with OpenAI GPT-4o-mini.
 
-**Status**: Phase 1 delivery complete (October 10, 2025)
+**Status**: Phase 1 delivery complete (October 10, 2025) | Option A unified classification (October 18, 2025)
 **Budget**: $1,000 fixed / 10 hours
 **Client**: MinS Education Platform
+**Current Branch**: `feature/unified-response-node`
 
 ## Key Architecture
 
-### Two-Stage Triage System
-The core innovation is a two-stage classification system:
+### Multi-Agent Orchestration System (Option A)
+The current architecture implements a **unified classification workflow** with multi-agent orchestration:
 
-1. **Stage 1 (LLM)**: Determines if student input is an answer attempt or non-answer (question/help/off-topic)
-2. **Stage 2a (Rule-based)**: If answer → verify correctness → classify as correct/close/wrong_operation
-3. **Stage 2b (LLM)**: If non-answer → classify as conceptual_question/stuck/off_topic
+**Three LLM Agents**:
+1. **Content Feature Extractor** (temp 0.1): Extracts message_type, numeric_value, keywords from student messages
+2. **Synthesis Detector** (temp 0.1): Prevents infinite scaffolding loops by analyzing conversation patterns
+3. **Response Generator** (temp 0.3): Generates pedagogically appropriate tutor responses
 
-This separation is critical because you cannot verify an answer before knowing it's an answer attempt, but you need verification results to classify answer quality.
+**Four Rule-Based Validators** (only ONE executes per turn):
+1. **Enhanced Numeric Verifier**: Numeric answer verification with operation error detection
+2. **Semantic Validator**: Pattern matching for conceptual answers
+3. **Teach-Back Validator**: Distinguishes explanation attempts from help requests
+4. **Classify Stuck**: Handles help requests and off-topic messages
+
+**Key Innovation**: Hybrid intelligence balancing deterministic rules (fast) with LLM reasoning (flexible).
+
+See `2-prototype/ARCHITECTURE.md` for complete multi-agent orchestration details.
 
 ### Six Teaching Categories
 All system behavior routes through these categories:
@@ -47,12 +57,16 @@ Sessions maintain last 15 conversation turns for context, track attempt count pe
   diagrams/            - Visual architecture
 
 2-prototype/           - Working n8n implementation
-  workflow.json        - Importable n8n workflow (complete system)
-  workflow-simple.json - Simplified version
+  workflow-production-ready.json        - Current unified classification workflow (Option A)
+  workflow-production-ready-backup.json - Backup of previous dual-system workflow
+  config_registries.js                  - Configuration registries (ERROR_DETECTORS, SEMANTIC_PATTERNS)
+  ARCHITECTURE.md                       - Multi-agent orchestration architecture
+  OPTION-A-COMPLETE.md                  - Implementation summary and bug fixes
+  EXTENDING-TO-NEW-QUESTIONS.md         - Genericity guide for new subjects
   functions/           - JavaScript for n8n nodes
-    verify_answer.js           - Math verification with edge cases
+    verify_answer.js           - Math verification with edge cases (DEPRECATED - see Enhanced Numeric Verifier)
     session_management.js      - Session state & memory window
-    classify_answer_quality.js - Rule-based classification
+    classify_answer_quality.js - Rule-based classification (DEPRECATED - see validators)
   exemplars/           - Test questions with expected behaviors
   docs/                - API spec, integration, deployment guides
 
@@ -64,11 +78,35 @@ Sessions maintain last 15 conversation turns for context, track attempt count pe
 
 ## Critical Implementation Details
 
-### Answer Verification (2-prototype/functions/verify_answer.js)
-- Uses math.js to evaluate mathematical expressions
-- Handles decimals, fractions, written numbers ("two" → "2"), negatives
+### Answer Verification (Enhanced Numeric Verifier node)
+- Handles decimals, negatives, written numbers ("two" → "2")
 - **20% threshold**: Answers within 20% of correct value are "close" (not "wrong")
-- Returns: {correct: bool, close: bool, student_value: number, correct_value: number, difference: number}
+- **Operation error detection**: Uses ERROR_DETECTORS registry to identify plausible errors
+  - Example: -3 + 5, student says "8" → wrong_operation (forgot negatives)
+  - Example: -3 + 5, student says "45" → stuck (not plausible error)
+- Returns: {category: 'correct'|'close'|'wrong_operation'|'stuck', confidence, reasoning}
+
+### Configuration Registries (2-prototype/config_registries.js)
+**ERROR_DETECTORS**: Define plausible operation errors per problem type
+```javascript
+ERROR_DETECTORS['math_arithmetic_addition'] = (num1, num2, operation) => [
+  Math.abs(num1) + Math.abs(num2),  // Forgot negatives
+  num1 - num2,                       // Subtracted instead
+  // ... more patterns
+];
+```
+
+**SEMANTIC_PATTERNS**: Define expected keywords for conceptual validation
+```javascript
+SEMANTIC_PATTERNS['math_operation_identification'] = {
+  questionPatterns: ['adding or subtracting'],
+  expectedKeywords: {'+': ['adding', 'add', 'plus']},
+  wrongKeywords: {'+': ['subtracting', 'subtract']}
+};
+```
+
+**Extensibility**: Add new subjects by extending registries, no workflow changes needed.
+See `2-prototype/EXTENDING-TO-NEW-QUESTIONS.md` for detailed guide.
 
 ### Session Schema
 ```javascript
@@ -103,9 +141,11 @@ The system is built in n8n, not as standalone code. To test:
    # Or use n8n Cloud
    ```
 
-2. **Import workflow**: Load `2-prototype/workflow.json` into n8n
+2. **Import workflow**: Load `2-prototype/workflow-production-ready.json` into n8n
 
 3. **Configure credentials**: Add OpenAI API key in n8n settings
+
+   **Rollback**: If issues occur, use `2-prototype/workflow-production-ready-backup.json` for previous dual-system workflow
 
 4. **Test webhook**: Use exemplar questions from `2-prototype/exemplars/questions.json`
    ```bash
@@ -243,15 +283,34 @@ Current problem data must come from MinS database. Session ID should be generate
 
 ## Key References
 
-- **Blueprint**: `1-blueprint/Tutoring-Flow-Blueprint.md` (10 pages, complete spec)
+### Architecture & Implementation
+- **Architecture**: `2-prototype/ARCHITECTURE.md` (Multi-agent orchestration, hybrid intelligence)
+- **Implementation Summary**: `2-prototype/OPTION-A-COMPLETE.md` (What was built, bug fixes, testing)
+- **Extensibility Guide**: `2-prototype/EXTENDING-TO-NEW-QUESTIONS.md` (Adding new subjects, 3-tier genericity model)
+
+### Original Spec & Integration
+- **Blueprint**: `1-blueprint/Tutoring-Flow-Blueprint.md` (10 pages, original spec)
 - **API Spec**: `2-prototype/docs/API-SPEC.md`
 - **Integration**: `2-prototype/docs/INTEGRATION.md`
 - **Deployment**: `2-prototype/docs/DEPLOYMENT.md`
+
+### Delivery & Handoff
 - **Handoff**: `3-delivery/HANDOFF-CHECKLIST.md`
 - **Limitations**: `3-delivery/KNOWN-LIMITATIONS.md`
 
 ## Notes for Future Development
 
+### Option A Implementation (October 18, 2025)
+- **Current workflow**: `workflow-production-ready.json` implements unified classification with multi-agent orchestration
+- **Backup available**: `workflow-production-ready-backup.json` contains previous dual-system implementation
+- **Key architectural changes**:
+  - Replaced dual classification system (AI Agent + LLM Extract) with single unified flow
+  - Added 4 specialized validators: Enhanced Numeric Verifier, Semantic Validator, Teach-Back Validator, Classify Stuck
+  - Introduced configuration registries (ERROR_DETECTORS, SEMANTIC_PATTERNS) for extensibility
+  - Implemented scaffolding heuristic for context-aware routing
+  - Added Teach-Back Validator to distinguish explanation attempts from help requests
+
+### General Guidelines
 - Do not modify the 6 core categories without stakeholder approval (pedagogically validated)
 - All prompt changes should be tested against exemplar questions
 - Maintain API contract backward compatibility (frontend depends on it)
@@ -259,3 +318,9 @@ Current problem data must come from MinS database. Session ID should be generate
 - The system is stateless per-request (all state in session object)
 - Sessions expire after 30 minutes; this is intentional (not a bug)
 - Verification can fail gracefully (returns error object, tutor asks for clarification)
+
+### Extending to New Subjects
+- **Tier 1** (arithmetic operations): Works out-of-box, just add questions
+- **Tier 2** (fractions, geometry, percentages): Add patterns to config_registries.js, no workflow changes
+- **Tier 3** (multiple choice, open-ended): Requires new validator nodes and workflow modifications
+- See `2-prototype/EXTENDING-TO-NEW-QUESTIONS.md` for detailed guide
